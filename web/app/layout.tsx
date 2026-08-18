@@ -1,35 +1,23 @@
 import type { Metadata } from "next";
-import { Newsreader, Instrument_Sans, Spline_Sans_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
 /**
- * Three faces, one per register.
+ * One typeface, three weights, and the weights are the point:
  *
- * Newsreader carries the record — criteria, receipts, reasoning. Anything a
- * panel reads verbatim is set in it, because those are the surfaces meant to
- * be read rather than scanned.
+ *   200 carries every paragraph — body copy is ultra-light so the reading
+ *       surface feels airy rather than argued.
+ *   400 carries every headline, at massive scale with hard negative
+ *       tracking. Hierarchy comes from size, never from bolding.
+ *   600 exists only for small uppercase labels and the one pill button.
  *
- * Instrument Sans runs the interface. Spline Sans Mono carries every machine
- * value: amounts, digests, addresses, epochs.
+ * Machine values (ids, digests, epochs) fall back to the system monospace —
+ * a hash is not prose and should not pretend to be.
  */
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-});
-
-const instrument = Instrument_Sans({
-  variable: "--font-instrument",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  display: "swap",
-});
-
-const spline = Spline_Sans_Mono({
-  variable: "--font-spline",
-  subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["200", "400", "600"],
   display: "swap",
 });
 
@@ -45,10 +33,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${newsreader.variable} ${instrument.variable} ${spline.variable}`}
-    >
+    <html lang="en" className={inter.variable}>
       <body>{children}</body>
     </html>
   );

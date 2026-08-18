@@ -21,7 +21,7 @@ const CONTRACT = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "") as `0x${string
 
 export const COURT_CONFIGURED = /^0x[a-fA-F0-9]{40}$/.test(CONTRACT);
 
-const TRANSIENT = /rate limit|429|-32029|failed to fetch|unreachable|doctype|not valid json|unknown rpc|unexpected token|502|503|504|timeout|econnreset/i;
+const TRANSIENT = /rate limit|429|-32029|failed to fetch|fetch failed|unreachable|doctype|not valid json|unknown rpc|unexpected token|502|503|504|timeout|econnreset|socket/i;
 
 export type CourtPayment = {
   payment_id: string;
@@ -71,6 +71,70 @@ async function readWithRetry<T>(fn: string, args: string[]): Promise<T | null> {
 export async function getPayment(paymentId: string): Promise<CourtPayment | null> {
   if (!COURT_CONFIGURED) return null;
   return readWithRetry<CourtPayment>("get_payment", [paymentId]);
+}
+
+// ── console reads ────────────────────────────────────────────────────────────
+// The observatory's views. Same retry discipline; null means "not on court"
+// (an empty string from the contract), while a thrown error means the read
+// itself failed and the page must say so rather than render an empty book.
+
+export type CourtStats = {
+  sellers: number; quotes: number; payments: number; disputes: number;
+  upheld: number; refunds: number; inconclusive: number;
+  bonds_held_atto: string;
+};
+
+export type CourtConfig = {
+  operator: string; min_bond_atto: string; min_challenge_bond_atto: string;
+  challenge_bond_bps: number; slash_bps: number;
+  dispute_terminal_seconds: number; receipt_grace_seconds: number;
+  window_seconds: [number, number];
+};
+
+export type CourtSeller = {
+  seller: string; bond_atto: string; reserved_atto: string;
+  quotes: number; payments: number;
+  receipts_upheld: number; receipts_broken: number; slashed_atto: string;
+};
+
+export type CourtQuote = {
+  quote_hash: string; seller: string; criteria: string;
+  window_seconds: number; amount_atto: string; asset: string; active: boolean;
+};
+
+export type CourtPaymentRow = {
+  payment_id: string; state: string; amount_atto: string;
+  seller: string; buyer: string;
+};
+
+export async function getStats(): Promise<CourtStats | null> {
+  if (!COURT_CONFIGURED) return null;
+  return readWithRetry<CourtStats>("get_stats", []);
+}
+
+export async function getConfig(): Promise<CourtConfig | null> {
+  if (!COURT_CONFIGURED) return null;
+  return readWithRetry<CourtConfig>("get_config", []);
+}
+
+export async function getSeller(addr: string): Promise<CourtSeller | null> {
+  if (!COURT_CONFIGURED) return null;
+  return readWithRetry<CourtSeller>("get_seller", [addr]);
+}
+
+export async function getQuote(quoteHash: string): Promise<CourtQuote | null> {
+  if (!COURT_CONFIGURED) return null;
+  return readWithRetry<CourtQuote>("get_quote", [quoteHash]);
+}
+
+export async function getPaymentsFor(
+  addr: string, role: "seller" | "buyer", offset = 0,
+): Promise<CourtPaymentRow[]> {
+  if (!COURT_CONFIGURED) return [];
+  const rows = await readWithRetry<CourtPaymentRow[]>(
+    "get_payments_for", [addr, role, String(offset)],
+  );
+  return rows ?? [];
 }
 
 export type OperatorWrite =
