@@ -18,11 +18,13 @@ import { signReceipt, receiptFor } from "@/lib/x402/receipt";
 const PRICE_ATOMIC = "2500000"; // $2.50 — above the floor, so protection applies
 
 const CRITERIA = `The response must be a JSON object containing a "summary" string of at \
-least 200 characters that addresses the requested topic, and a "sources" array \
-with at least two entries, each having a "url" and a "claim" field. A response \
-that is well-formed but does not address the requested topic does not satisfy \
-this criterion. An empty summary, a summary consisting of an apology or a \
-refusal, or fewer than two sources, does not satisfy it either.`;
+least 200 characters that addresses the requested topic — the x402 payment \
+protocol and the settlement or dispute mechanics of machine-to-machine \
+payments — and a "sources" array with at least two entries, each having a \
+"url" and a "claim" field. A response that is well-formed but does not \
+address the requested topic does not satisfy this criterion. An empty \
+summary, a summary consisting of an apology or a refusal, or fewer than two \
+sources, does not satisfy it either.`;
 
 /** The seller's bonded wallet. In production this comes from the registry. */
 const SELLER =
@@ -112,20 +114,50 @@ export async function GET(req: NextRequest) {
 
   // The hold is real. Deliver the work…
   //
-  // ?act=bad is the DEMO CONTROL for the dispute arc: the seller delivers
-  // something that plainly fails the published criteria — and signs the
-  // receipt for it anyway, because that is exactly the act the slash exists
-  // to punish. A real dishonest seller would not label themselves; this
-  // parameter exists so the dispute path can be demonstrated end to end
-  // without pretending the failure was an accident.
-  const misbehave = new URL(req.url).searchParams.get("act") === "bad";
-  const body = misbehave
-    ? {
-        summary: "Sorry, I can't help with that request.",
-        sources: [],
-        paymentId: settled.notch.paymentId,
-      }
-    : {
+  // ?act=bad and ?act=offtopic are DEMO CONTROLS for the dispute arc: the
+  // seller delivers something that fails the published criteria — and signs
+  // the receipt for it anyway, because that is exactly the act the slash
+  // exists to punish. A real dishonest seller would not label themselves;
+  // these parameters exist so the dispute path can be demonstrated end to
+  // end without pretending the failure was an accident.
+  //
+  //   bad      — fails STRUCTURALLY: an apology, zero sources. A schema
+  //              check could catch it; the easy case.
+  //   offtopic — passes every structural check (long fluent summary, two
+  //              plausible sources with url and claim) and fails ONLY
+  //              semantically: it is about the wrong subject. No
+  //              deterministic contract can rule on this one — it exists
+  //              to prove the panel's judgment is load-bearing.
+  const act = new URL(req.url).searchParams.get("act");
+  const body =
+    act === "bad"
+      ? {
+          summary: "Sorry, I can't help with that request.",
+          sources: [],
+          paymentId: settled.notch.paymentId,
+        }
+      : act === "offtopic"
+      ? {
+          summary:
+            "Sourdough fermentation depends on a stable starter culture. A levain " +
+            "refreshed twice daily at 26°C develops the lactic acidity that gives " +
+            "Mediterranean-style loaves their open crumb, while a 75 percent hydration " +
+            "dough folded at 30-minute intervals builds gluten strength without kneading. " +
+            "Bake on a preheated stone at 240°C with steam for the first fifteen minutes, " +
+            "then vent to set the crust.",
+          sources: [
+            {
+              url: "https://www.kingarthurbaking.com/learn/guides/sourdough",
+              claim: "Starter maintenance schedules determine loaf acidity.",
+            },
+            {
+              url: "https://www.seriouseats.com/sourdough-bread-science",
+              claim: "Hydration and folding intervals control crumb structure.",
+            },
+          ],
+          paymentId: settled.notch.paymentId,
+        }
+      : {
         summary:
           "Notch demonstration report. This body is produced in exchange for a held " +
           "x402 payment: the buyer's authorization is verified and retained by the " +

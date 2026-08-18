@@ -9,8 +9,9 @@ import { Constellation } from "./components/Constellation";
  * live record in the console.
  */
 
-const PROOF_OPTIMISTIC = "pay_9261d354ceb85bb3";
-const PROOF_DISPUTE = "pay_843a12d658f2a3cf";
+const PROOF_OPTIMISTIC = "pay_98b926f3ae2f1589";
+const PROOF_STRUCTURAL = "pay_843a12d658f2a3cf";
+const PROOF_SEMANTIC = "pay_5047729e03d30dcd";
 
 export default function Home() {
   return (
@@ -68,21 +69,23 @@ export default function Home() {
             <p className="t-label t-label-iris">Ruled by the panel, on-chain</p>
             <blockquote style={{ margin: "24px 0 0" }}>
               <p className="ruling-quote">
-                &ldquo;The delivered JSON contains an apologetic short summary
-                and an empty sources array, violating both requirements.&rdquo;
+                &ldquo;The form is correct, but the topic is entirely
+                unrelated to the specified subject.&rdquo;
               </p>
             </blockquote>
             <p className="t-caption" style={{ marginTop: 24, maxWidth: "44ch" }}>
-              A seller signed a receipt for a delivery that failed the
-              published criteria. The panel caught it; the false receipt cost
-              them bond and record.
+              A seller signed a receipt for a fluent, well-formed delivery
+              about the wrong subject — the failure no schema check can see.
+              The panel caught it; the false receipt cost them bond and
+              record.
             </p>
           </div>
           <div style={{ alignSelf: "center" }}>
-            <p className="t-label">Both arcs, one deployment</p>
+            <p className="t-label">Three arcs, one deployment</p>
             <div style={{ marginTop: 24, display: "grid", gap: 30 }}>
               <ProofRow id={PROOF_OPTIMISTIC} state="RELEASABLE" line="Delivered honestly — released by rule." />
-              <ProofRow id={PROOF_DISPUTE} state="REFUND_DUE" line="Receipted garbage — ruled, slashed, refunded." />
+              <ProofRow id={PROOF_STRUCTURAL} state="REFUND_DUE" line="Receipted garbage — ruled, slashed, refunded." />
+              <ProofRow id={PROOF_SEMANTIC} state="REFUND_DUE" line="Well-formed but off-topic — only judgment could catch it." />
             </div>
             <p className="t-caption" style={{ marginTop: 30 }}>
               These pages read the contract live.

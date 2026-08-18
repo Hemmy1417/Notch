@@ -38,6 +38,27 @@ const RPC = "https://studio.genlayer.com/api";
 const GEN = 10n ** 18n;
 const CHALLENGE_BOND = GEN / 10n;          // the 0.1 GEN floor governs here
 
+// Which misdelivery to buy: "bad" (fails structurally — the easy case) or
+// "offtopic" (passes every structural check, fails only semantically — the
+// case that proves the panel's judgment is load-bearing).
+const ACT = process.argv[2] || "bad";
+const CLAIMS = {
+  bad:
+    "The delivery is an apology with zero sources. The criteria require a summary " +
+    "of at least 200 characters addressing the topic and at least two sources " +
+    "with url and claim fields. Nothing delivered meets any part of that.",
+  offtopic:
+    "The delivery is well-formed — a long fluent summary and two sources with " +
+    "url and claim fields — but it is about sourdough baking. The criteria " +
+    "require the summary to address the x402 payment protocol and the " +
+    "settlement or dispute mechanics of machine-to-machine payments. Form is " +
+    "satisfied; the topic is not.",
+};
+if (!CLAIMS[ACT]) {
+  console.error(`unknown act "${ACT}" — use: bad | offtopic`);
+  process.exit(1);
+}
+
 const sha256 = (t) => createHash("sha256").update(t, "utf8").digest("hex");
 const short = (s) => `${String(s).slice(0, 10)}…${String(s).slice(-6)}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,10 +122,12 @@ function cliWrite(method, args) {
 }
 
 // ── 1: pay for a deliberately bad delivery ──────────────────────────────────
-step(1, "the buyer pays; the seller delivers GARBAGE and signs the receipt anyway");
+step(1, ACT === "offtopic"
+  ? "the buyer pays; the seller delivers a WELL-FORMED, OFF-TOPIC report and signs anyway"
+  : "the buyer pays; the seller delivers GARBAGE and signs the receipt anyway");
 const signer = await createSigner("base-sepolia", keys.buyerPk);
 const paidFetch = wrapFetchWithPayment(fetch, signer, BigInt(3_000_000));
-const res = await paidFetch(`${BASE_URL}/api/demo/report?act=bad`);
+const res = await paidFetch(`${BASE_URL}/api/demo/report?act=${ACT}`);
 if (res.status !== 200) die(`paid request failed: ${res.status} ${await res.text()}`);
 const bodyText = await res.text();
 const payRes = JSON.parse(Buffer.from(res.headers.get("x-payment-response"), "base64").toString("utf-8"));
@@ -142,12 +165,7 @@ ok(`receipt anchored; challenge window open until ${p.window_ends}`);
 step(3, "the buyer challenges — 0.1 GEN bond, inside the window");
 const sellerBefore = await courtRead("get_seller", [seller.address]);
 try {
-  await buyerWrite("challenge", [
-    notch.paymentId,
-    "The delivery is an apology with zero sources. The criteria require a summary " +
-    "of at least 200 characters addressing the topic and at least two sources " +
-    "with url and claim fields. Nothing delivered meets any part of that.",
-  ], CHALLENGE_BOND);
+  await buyerWrite("challenge", [notch.paymentId, CLAIMS[ACT]], CHALLENGE_BOND);
 } catch (e) {
   if (/insufficient|balance|funds/i.test(String(e?.message))) {
     die(`the buyer wallet has no GEN for the challenge bond. Fund it, then rerun:\n` +
