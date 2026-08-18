@@ -157,9 +157,14 @@ export function buildProtectedQuote(input: BuildQuoteInput): PaymentRequirements
     description: input.description,
     mimeType: input.mimeType ?? "application/json",
     payTo: input.payTo,
-    // The window is a Notch concept and lives in `extra`; maxTimeoutSeconds
-    // remains x402's own settlement timeout and is left alone.
-    maxTimeoutSeconds: input.maxTimeoutSeconds ?? 120,
+    // The authorization must outlive the challenge window — the settle route
+    // refuses any payment whose validBefore falls inside it, because a RELEASE
+    // ruling on an expired authorization would be unexecutable. So the x402
+    // timeout floor tracks the window (plus a margin for the record + anchor
+    // round-trip) rather than sitting at a fixed 120s that a longer window
+    // would silently outlast.
+    maxTimeoutSeconds:
+      input.maxTimeoutSeconds ?? Math.max(120, input.windowSeconds + 120),
     asset: input.asset,
     extra: { name: domain.name, version: domain.version, ...terms },
   };

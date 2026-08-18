@@ -300,6 +300,33 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 .feature-link h3 { transition: color .14s ease; }
 .feature-link:hover h3 { color: var(--iris-lit); }
 
+/* ── challenge panel: the one human action, still no card ────────────────── */
+.challenge-box { max-width: 640px; }
+.wallet-opt {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: none; border: 0; padding: 8px 0; margin-right: 28px;
+  font-family: var(--f-ui); font-weight: 600; font-size: 13px;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--iris-lit); cursor: pointer;
+  transition: color .14s ease;
+}
+.wallet-opt:hover { color: var(--bone); }
+.wallet-opt:disabled { opacity: .5; cursor: wait; }
+.wallet-opt img { width: 18px; height: 18px; border-radius: 4px; }
+.challenge-area {
+  width: 100%; margin-top: 18px; background: transparent;
+  border: 0; border-bottom: 1px solid rgba(232, 227, 217, 0.16);
+  color: var(--bone); font-family: var(--f-ui); font-weight: 400;
+  font-size: 16px; line-height: 1.5; padding: 12px 2px; resize: vertical;
+  min-height: 92px; outline: none;
+  transition: border-color .16s ease;
+}
+.challenge-area::placeholder { color: var(--ash); }
+.challenge-area:focus { border-color: var(--iris-lit); }
+.challenge-note { color: var(--ash); }
+.challenge-warn { color: var(--spark); }
+.challenge-err { color: var(--st-refund); }
+
 /* the ruling, quoted large — the panel's words are the product */
 .ruling-quote {
   font-weight: 200;

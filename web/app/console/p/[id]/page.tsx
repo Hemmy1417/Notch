@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ConsoleShell } from "../../../components/ConsoleShell";
 import { Hash } from "../../../components/Hash";
+import { ChallengePanel } from "../../../components/ChallengePanel";
 import { formatUsdc } from "@/lib/config";
 import { ago, isoUtc, fmtGen } from "@/lib/fmt";
 import {
@@ -27,6 +28,20 @@ type Dispute = {
   challenger: string; claim: string; bond_atto: string;
   filed_at: number; terminal_at: number;
 };
+
+// The challenge bond the contract will demand: max(10% of the payment, 0.1 GEN).
+// Computed here so the panel shows the exact figure the write must carry.
+// BigInt() call form, not literals — Next resets tsconfig target to ES2017.
+const MIN_CHALLENGE_BOND = BigInt("100000000000000000"); // 0.1 GEN
+function challengeBondAtto(amountAtto: string): string {
+  let pct: bigint;
+  try {
+    pct = (BigInt(amountAtto) * BigInt(1000)) / BigInt(10000);
+  } catch {
+    pct = BigInt(0);
+  }
+  return (pct > MIN_CHALLENGE_BOND ? pct : MIN_CHALLENGE_BOND).toString();
+}
 
 const STATE_LINE: Record<string, string> = {
   AWAITING_RECEIPT: "Recorded; the seller has not yet anchored a receipt. No receipt, no release.",
@@ -96,6 +111,16 @@ export default async function PaymentRecord({ params }: Params) {
       <p className="t-body t-body-dim" style={{ marginTop: 16 }}>
         {STATE_LINE[p.state] ?? ""}
       </p>
+
+      {/* the one human action: a bonded challenge, only while the window is open */}
+      {p.state === "WINDOW" ? (
+        <ChallengePanel
+          paymentId={p.payment_id}
+          buyer={p.buyer}
+          bondAtto={challengeBondAtto(p.amount_atto)}
+          windowEndsEpoch={p.window_ends}
+        />
+      ) : null}
 
       {/* the ruling first when there is one — it is the product */}
       {p.ruling && d ? (

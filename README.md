@@ -233,6 +233,30 @@ python -m pytest tests/direct -q        # 46 direct tests
 python scripts/phase2/12_mutate.py      # the mutation sweep
 ```
 
+## Filing a challenge by hand (the one human action)
+
+Everything above is agent-driven — the buyer pays headlessly over x402. But
+raising a dispute is a person's decision, so the console has a wallet-connected
+challenge flow on any payment inside its window (`/console/p/<id>` →
+**Dispute this payment**). It connects a GenLayer wallet (EIP-6963), shows the
+exact bond the write must carry, refuses the submit unless the connected wallet
+is the payment's buyer (the contract enforces buyer-only), and files the bonded
+`challenge` transaction — then the record flips to DISPUTED.
+
+To see it live, seed a payment and leave it in its window:
+
+```bash
+# from web/  (needs a ~600s window: NEXT_PUBLIC_NOTCH_WINDOW_SECONDS=600)
+node scripts/seed-window.mjs offtopic
+# → prints a /console/p/<id> URL with ~10 minutes on the clock
+```
+
+Open the URL, connect the buyer wallet (its key is the demo buyer in
+`web/.data/e2e-keys.json`; add StudioNet to the wallet), and file the
+challenge. The panel's reads route through a same-origin `/api/rpc` proxy so a
+rate-limited StudioNet response can't surface as a bare "Failed to fetch"
+mid-write.
+
 ## Honest limitations
 
 - **The rail dry-runs.** `SETTLEMENT_PRIVATE_KEY` is unfunded, so the final
