@@ -45,10 +45,14 @@ export default async function Console() {
   return (
     <ConsoleShell active="overview">
       <header className="wrap section" style={{ paddingTop: 60 }}>
-        <p className="t-label t-label-spark">The court, read live</p>
-        <h1 className="t-heading-lg" style={{ marginTop: 18, maxWidth: "16ch" }}>
-          Nothing here is stored anywhere Notch could edit.
+        <p className="t-label t-label-spark">Overview</p>
+        <h1 className="t-heading-lg" style={{ marginTop: 18 }}>
+          The court, read live.
         </h1>
+        <p className="t-caption" style={{ marginTop: 14, maxWidth: "52ch" }}>
+          Every figure on this page is a contract read — there is no database
+          behind it, so there is nothing Notch could quietly edit.
+        </p>
       </header>
 
       {readError ? <ReadError msg={readError} /> : null}

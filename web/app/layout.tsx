@@ -22,7 +22,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Notch — evidence cut before the money moves",
+  title: "Notch — evidence fixed before the money moves",
   description:
     "Escrow-backed x402 agent payments. What counts as delivery is agreed " +
     "before payment, the seller signs a receipt to be paid at all, and a " +

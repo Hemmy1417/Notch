@@ -23,7 +23,7 @@ export default function Home() {
           <div>
             <p className="t-label t-label-spark">A recourse layer for x402</p>
             <h1 className="t-display" style={{ marginTop: 24 }}>
-              Evidence cut before the money moves.
+              Evidence fixed before the money moves.
             </h1>
             <p className="t-body t-body-dim" style={{ marginTop: 30 }}>
               x402 settlement is a push payment, irreversible once executed.

@@ -55,9 +55,9 @@ function insideTally(u: number, v: number): boolean {
   const x = cx * Math.cos(t) - cy * Math.sin(t) + 0.5;
   const y = cx * Math.sin(t) + cy * Math.cos(t) + 0.5;
 
-  const top = 0.06, bottom = 0.94;
-  const gapL = 0.46, gapR = 0.54;      // the split
-  const leftL = 0.30, rightR = 0.70;   // outer edges
+  const top = 0.05, bottom = 0.95;
+  const gapL = 0.475, gapR = 0.525;    // the split — narrow, a saw-kerf
+  const leftL = 0.285, rightR = 0.715; // outer edges
 
   if (y < top || y > bottom) return false;
 
@@ -65,10 +65,10 @@ function insideTally(u: number, v: number): boolean {
   const inRight = x >= gapR && x <= rightR;
   if (!inLeft && !inRight) return false;
 
-  // Matching notch cuts on the FACING edges — the deal marks.
-  // Each notch is a triangle cut into the half, apex pointing outward.
+  // Matching notch cuts on the FACING edges — the deal marks. Deep and
+  // wide enough that the matching-teeth silhouette reads at a glance.
   const notches = [0.24, 0.5, 0.74];
-  const depth = 0.085, half = 0.055;
+  const depth = 0.14, half = 0.075;
   for (const ny of notches) {
     const dy = Math.abs(y - ny);
     if (dy < half) {
