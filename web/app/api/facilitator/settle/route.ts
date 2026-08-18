@@ -1,35 +1,38 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { SettleResult } from "@/lib/x402/facilitator";
+import { SUPPORTED_KINDS, notchTermsOf } from "@/lib/x402/notch";
+import { domainFor, verifyAuthorizationSignature } from "@/lib/x402/eip3009";
+import { quoteHash } from "@/lib/x402/quote-hash";
+import { holdStore } from "@/lib/server/holds";
+import type { Hex } from "viem";
 
 /**
  * POST /api/facilitator/settle
  *
- * Where Notch diverges from every other facilitator.
+ * Where Notch diverges from every other facilitator: a valid payment is not
+ * submitted — it is HELD. The buyer's funds stay in the buyer's wallet, the
+ * seller is not yet paid, and what happens next is decided by the contract's
+ * published rules, not by this service.
  *
- * A normal facilitator submits the buyer's authorization here and the money
- * moves. Notch does not. It records the hold, starts the challenge window, and
- * returns without submitting â€” the authorization sits unexecuted, so the
- * buyer's funds never leave their wallet and the seller is not yet paid.
- *
- * Submission happens later, when a published rule says to release: either the
- * window closed with a valid receipt and no challenge, or a panel ruled for
- * the seller. On refund, we simply never submit and the authorization expires
- * at `validBefore`.
- *
- * BLOCKER, stated rather than hidden: actual on-chain submission arrives in
- * Phase 3. This endpoint currently records the hold and reports honestly that
- * nothing has settled. It never returns a fabricated transaction hash.
+ * As of Phase 3 the hold is real: the signature is recovered against the
+ * token's EIP-712 domain, the quote hash is recomputed from the served terms,
+ * and the authorization is persisted (idempotent by nonce — one replay slot,
+ * one hold, ever). What remains operator-driven on-chain (record_payment) is
+ * reported in the response rather than implied.
  */
-/**
- * Structure, not just parseability.
- *
- * A first version only rejected input that failed JSON.parse, so `{junk:1}`
- * fell through and was recorded as a HELD payment with no authorization behind
- * it â€” a hold over nothing, which would later look like a payment that could
- * be released. Anything we agree to hold must be a thing we could actually
- * submit.
- */
+
+const NETWORK_CHAIN: Record<string, number> = { "base-sepolia": 84532 };
+
+const AuthSchema = z.object({
+  from: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  to: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  value: z.string().regex(/^[0-9]+$/),
+  validAfter: z.string().regex(/^[0-9]+$/),
+  validBefore: z.string().regex(/^[0-9]+$/),
+  nonce: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+});
+
 const SettleSchema = z.object({
   x402Version: z.number().int(),
   paymentPayload: z.object({
@@ -37,46 +40,139 @@ const SettleSchema = z.object({
     network: z.string().min(1),
     payload: z.object({
       signature: z.string().regex(/^0x[a-fA-F0-9]+$/),
-      authorization: z.object({
-        from: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-        to: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-        value: z.string().regex(/^[0-9]+$/),
-        validAfter: z.string().regex(/^[0-9]+$/),
-        validBefore: z.string().regex(/^[0-9]+$/),
-        nonce: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
-      }),
+      authorization: AuthSchema,
     }),
   }),
+  paymentRequirements: z.object({
+    scheme: z.string(),
+    network: z.string(),
+    payTo: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    asset: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+    maxAmountRequired: z.string().regex(/^[0-9]+$/),
+    extra: z.record(z.string(), z.unknown()).optional(),
+  }),
 });
+
+function refuse(network: string, reason: string, status = 200): NextResponse {
+  const body: SettleResult = { success: false, transaction: "", network, errorReason: reason };
+  return NextResponse.json(body, { status });
+}
 
 export async function POST(req: NextRequest) {
   let parsed: z.infer<typeof SettleSchema>;
   try {
     parsed = SettleSchema.parse(await req.json());
   } catch {
-    return NextResponse.json(
-      { success: false, transaction: "", network: "", errorReason: "malformed_payment_payload" } satisfies SettleResult,
-      { status: 400 },
-    );
+    return refuse("", "malformed_payment_payload", 400);
   }
 
-  const network = parsed.paymentPayload.network;
+  const { paymentPayload: pay, paymentRequirements: need } = parsed;
+  const network = pay.network;
 
-  const result: SettleResult = {
-    success: false,
-    transaction: "",
-    network,
-    // x402's SettlementResponse carries errorReason for exactly this: telling
-    // the caller why nothing moved. "Held" is the truthful answer.
-    errorReason: "held_pending_challenge_window",
-  };
+  const kind = `${pay.scheme}:${network}`;
+  if (!SUPPORTED_KINDS.some((k: { scheme: string; network: string }) =>
+        `${k.scheme}:${k.network}` === kind)) {
+    return refuse(network, "unsupported_scheme_or_network");
+  }
 
-  return NextResponse.json(result, {
-    status: 200,
-    headers: {
-      // Make the divergence legible to anyone reading the wire, not just the docs.
-      "X-Notch-State": "HELD",
-    },
+  const auth = pay.payload.authorization;
+
+  // The terms this payment was made under. No Notch terms, no hold — a
+  // payment with no bound criteria has nothing a dispute could judge.
+  const terms = notchTermsOf(need.extra);
+  if (!terms) {
+    return refuse(network, "missing_notch_terms");
+  }
+
+  // ── the real checks ────────────────────────────────────────────────────
+  const chainId = NETWORK_CHAIN[network];
+  const domain = chainId ? domainFor(chainId, need.asset) : null;
+  if (!domain) {
+    return refuse(network, "unknown_token_domain");
+  }
+  const genuine = await verifyAuthorizationSignature(
+    domain, auth, pay.payload.signature as Hex,
+  );
+  if (!genuine) {
+    return refuse(network, "invalid_signature");
+  }
+  if (auth.to.toLowerCase() !== need.payTo.toLowerCase()) {
+    return refuse(network, "wrong_recipient");
+  }
+  if (BigInt(auth.value) < BigInt(need.maxAmountRequired)) {
+    return refuse(network, "insufficient_amount");
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (Number(auth.validBefore) <= now) return refuse(network, "authorization_expired");
+  if (Number(auth.validAfter) > now) return refuse(network, "authorization_not_yet_valid");
+
+  // The authorization must outlive the challenge window, or a dispute could
+  // outlast the payment it is about and a RELEASE ruling would be unexecutable.
+  if (Number(auth.validBefore) < now + terms.windowSeconds) {
+    return refuse(network, "authorization_expires_inside_challenge_window");
+  }
+
+  const qh = quoteHash({
+    seller: terms.seller,
+    criteria: terms.criteria,
+    windowSeconds: terms.windowSeconds,
+    amountAtto: need.maxAmountRequired,
+    asset: need.asset,
   });
-}
+  // The 402 carried the seller's claimed quote hash; recompute and compare.
+  // A mismatch means the served terms and the served hash disagree — a seller
+  // lying about their own quote — and nothing downstream could ever bind that
+  // payment to registered terms.
+  if (terms.quoteHash !== qh) {
+    return refuse(network, "quote_hash_mismatch");
+  }
 
+  // Deterministic payment id from the replay slot: same authorization, same
+  // id, so a retried /settle cannot double-hold.
+  const paymentId = `pay_${auth.nonce.slice(2, 18)}`;
+
+  try {
+    await holdStore().put({
+      paymentId,
+      quoteHash: qh,
+      network,
+      asset: need.asset,
+      authorization: auth,
+      signature: pay.payload.signature,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg.includes("already held")) {
+      // Idempotent success: this exact authorization is already on hold.
+      return NextResponse.json(
+        {
+          success: false, transaction: "", network,
+          errorReason: "held_pending_challenge_window",
+          notch: { paymentId, quoteHash: qh, state: "HELD", idempotent: true },
+        },
+        { status: 200, headers: { "X-Notch-State": "HELD", "X-Notch-Payment-Id": paymentId } },
+      );
+    }
+    return refuse(network, "hold_conflict_nonce_reused");
+  }
+
+  return NextResponse.json(
+    {
+      success: false,           // true would mean "settled on-chain" — it is not
+      transaction: "",          // never fabricated
+      network,
+      payer: auth.from,
+      errorReason: "held_pending_challenge_window",
+      notch: {
+        paymentId,
+        quoteHash: qh,
+        state: "HELD",
+        windowSeconds: terms.windowSeconds,
+        note: "The authorization is held, not submitted. Release or refund is " +
+              "decided by the Notch contract's published rules; record_payment " +
+              "is the operator's next on-chain step.",
+      },
+    },
+    { status: 200, headers: { "X-Notch-State": "HELD", "X-Notch-Payment-Id": paymentId } },
+  );
+}

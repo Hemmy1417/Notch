@@ -65,6 +65,17 @@ class _Address(str):
         return super().__new__(cls, str(v))
 
 
+class _CliAddress:
+    """What the genlayer CLI actually delivers for a 40-hex argument: an
+    Address OBJECT with .as_hex and no str methods. A live record_payment
+    reverted on .lower() because the stub modelled every param as str —
+    this class exists so the suite can never be blind to that again."""
+    def __init__(self, hex_str):
+        self.as_hex = hex_str
+    def __repr__(self):
+        return f"<Address {self.as_hex}>"
+
+
 class _ViewDeco:
     def __call__(self, fn):
         return fn

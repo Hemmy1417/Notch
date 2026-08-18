@@ -4,9 +4,10 @@
 
 | | |
 |---|---|
-| Contract | `0x1E5e00ab31f21E84885738EC9716143eDCc89f01` |
-| Deploy tx | `0xed8de0255c914ba9f550841119c81e63f12badb96d25ac7130ec31299ab6470c` |
-| Version | v0.1.0 |
+| Contract | `0x3b04440389416407194E7DD979577065c6EbfEfa` |
+| Deploy tx | `0xf636bba841443db16050711a7203da1ac1e7699fb849c1de6ea4dee72a14941a` |
+| Version | v0.1.1 |
+| Supersedes | `0x1E5e00ab…9f01` (v0.1.0 — Address-normalization fix below) |
 | Deployer / operator | `0x10dbf82a8bb191bd1c082de5ef915e998aa5ccd7` |
 | Network | GenLayer StudioNet (chainId 61999), gasless |
 | Runner | pinned `py-genlayer:1jb45aa8…jpz09h6` |
@@ -54,3 +55,38 @@ verification in `/verify`, submission on RELEASABLE, expiry on REFUND_DUE,
 `mark_settled` wired to the real rail outcome. Then the end-to-end proof: one
 payment paid by a real x402 client, held, released, and visible on Base
 Sepolia.
+
+
+## Phase 3 — the end-to-end proof (2026-08-18)
+
+An **unmodified `x402-fetch` client** paid our 402 and the full arc ran live:
+
+```text
+[3] our EIP-712 domain matches the token's on-chain DOMAIN_SEPARATOR
+    paid, delivered, and HELD — payment pay_b110f6cc9c969622
+[4] receipt signature recovers to the BONDED seller wallet
+    bodySha256 matches the exact bytes received
+[5] payment on court — seller exposure reserved (S23)
+[6] receipt anchored by the seller's own signed write; window armed
+[7] 60s challenge window, real fetched wall-clock time
+[8] permissionless finalize -> RELEASABLE
+[9] reconcile: rail follows court — DRY RUN (no settlement key funded)
+```
+
+`quote hash served == registered == paid-against` (TS/Python parity, live).
+The only unexecuted step is the actual USDC submission on Base Sepolia, which
+needs `SETTLEMENT_PRIVATE_KEY` funded with testnet ETH; the reconciler
+reported that honestly as a dry run rather than inventing a hash.
+
+### Three live-fire bugs the E2E caught that every unit test missed
+1. **Two canonicalizations** — the 402 served a Phase-1 hash (bound
+   resource/payTo) the contract could never compute. Collapsed to one
+   function; a conformance test now pins served == contract hash.
+2. **`extra` eviction** — x402 v1's EVM scheme reads the token's EIP-712
+   `name`/`version` from `PaymentRequirements.extra`, with a silent on-chain
+   fallback. Notch's terms had displaced them, so the client signed under a
+   different domain than we verified. They now coexist.
+3. **CLI Address auto-typing** — the genlayer CLI delivers any 40-hex arg as
+   an Address OBJECT; `buyer.lower()` reverted on-chain while 44 stub-based
+   tests stayed green. Every address-taking entry now normalizes via
+   `_addr_str`, pinned by a test that passes an Address object.

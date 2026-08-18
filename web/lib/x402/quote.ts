@@ -9,6 +9,10 @@
  */
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { quoteHash } from "./quote-hash";
+import { domainFor } from "./eip3009";
+
+const NETWORK_CHAIN: Record<string, number> = { "base-sepolia": 84532 };
 import { NotchTermsSchema, type NotchTerms, MAX_CRITERIA_CHARS } from "./notch";
 
 /**
@@ -59,18 +63,24 @@ export function quoteHashOf(input: {
   criteria: string;
   windowSeconds: number;
 }): string {
-  const canonical = JSON.stringify([
-    "notch.quote.v1",
-    input.resource,
-    input.network,
-    input.asset,
-    input.maxAmountRequired,
-    input.payTo.toLowerCase(),
-    input.seller.toLowerCase(),
-    input.criteria,
-    input.windowSeconds,
-  ]);
-  return sha256(canonical);
+  // ONE canonicalization exists in this codebase: the contract's, mirrored in
+  // quote-hash.ts and pinned to the deployed Python by fixed test vectors.
+  //
+  // An earlier version of this function had its own richer form (a JSON array
+  // that also bound resource/network/payTo). It looked more thorough and it
+  // was WRONG in the only way that matters: the contract could never have
+  // computed it, so the hash the 402 served could never be found on the
+  // court. The live E2E caught it — the quote registered, then vanished under
+  // the served hash. resource and payTo are deliberately NOT part of the
+  // quote identity: a seller may serve one quote from many hosts, and payTo
+  // equals the bonded seller in every Notch flow.
+  return quoteHash({
+    seller: input.seller,
+    criteria: input.criteria,
+    windowSeconds: input.windowSeconds,
+    amountAtto: input.maxAmountRequired,
+    asset: input.asset,
+  });
 }
 
 export type BuildQuoteInput = {
@@ -122,6 +132,23 @@ export function buildProtectedQuote(input: BuildQuoteInput): PaymentRequirements
   // on the buyer's side.
   NotchTermsSchema.parse(terms);
 
+  // x402's v1 EVM scheme reads the token's EIP-712 domain from `extra.name` /
+  // `extra.version` — with a fallback to an ON-CHAIN version() read when they
+  // are absent. Omitting them cost a live E2E run: the client fell back,
+  // signed under the chain's own idea of the domain, and our verifier
+  // (hardcoded name/version) called the honest signature invalid. `extra` is
+  // an open object, so the protocol's domain hints and the Notch terms ride
+  // together.
+  const chainId = NETWORK_CHAIN[input.network];
+  const domain = chainId ? domainFor(chainId, input.asset) : null;
+  if (!domain) {
+    throw new Error(
+      `no verified EIP-712 domain for ${input.asset} on ${input.network} — ` +
+      "serving a quote we could not verify signatures against would refuse " +
+      "every honest payment",
+    );
+  }
+
   const requirements: PaymentRequirements = {
     scheme: "exact",
     network: input.network,
@@ -134,7 +161,7 @@ export function buildProtectedQuote(input: BuildQuoteInput): PaymentRequirements
     // remains x402's own settlement timeout and is left alone.
     maxTimeoutSeconds: input.maxTimeoutSeconds ?? 120,
     asset: input.asset,
-    extra: terms,
+    extra: { name: domain.name, version: domain.version, ...terms },
   };
 
   return PaymentRequirementsSchema.parse(requirements);

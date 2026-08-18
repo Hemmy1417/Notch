@@ -85,6 +85,24 @@ def test_a_retired_quote_takes_no_new_payments(module, c):
 
 # ── payments: recorded by the operator, reserved at acceptance ───────────────
 
+def test_address_objects_from_the_cli_are_normalized(module, c):
+    """The live revert this pins: 'Address' object has no attribute 'lower'.
+    The CLI auto-types 40-hex args as Address objects; every address-taking
+    entry must normalize rather than assume str."""
+    from .conftest import _CliAddress
+    registered_seller(module, c)
+    qh = registered_quote(module, c)
+    as_(module, OPERATOR, 0)
+    # buyer arrives as an Address OBJECT, exactly as the CLI delivers it
+    c.record_payment("pay-addr", qh, _CliAddress(BUYER))
+    import json as _json
+    p = _json.loads(c.get_payment("pay-addr"))
+    assert p["buyer"] == BUYER                      # normalized to lowercase hex
+    # and the buyer index finds it under the plain string key too
+    listed = _json.loads(c.get_payments_for(BUYER, "buyer"))
+    assert any(x["payment_id"] == "pay-addr" for x in listed)
+
+
 def test_only_the_operator_records_payments(module, c):
     registered_seller(module, c)
     qh = registered_quote(module, c)

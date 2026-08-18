@@ -101,11 +101,25 @@ def _as_int(v, default: int) -> int:
         return default
 
 
-def _valid_addr(a: str) -> bool:
-    a = str(a).strip().lower()
-    if not a.startswith("0x") or len(a) != 42:
+def _addr_str(a) -> str:
+    """Normalize an address-ish parameter to lowercase hex.
+
+    A parameter annotated `str` is NOT guaranteed to arrive as one: the
+    genlayer CLI auto-types any 40-hex-char argument as an Address object,
+    which has no .lower() — a live record_payment reverted on exactly that
+    (the direct-test stub models params as plain strings, so 44 green tests
+    never saw it). Address exposes .as_hex; anything else goes through str().
+    """
+    h = getattr(a, "as_hex", None)
+    s = h if isinstance(h, str) else str(a)
+    return s.strip().lower()
+
+
+def _valid_addr(a) -> bool:
+    s = _addr_str(a)
+    if not s.startswith("0x") or len(s) != 42:
         return False
-    return all(c in "0123456789abcdef" for c in a[2:])
+    return all(c in "0123456789abcdef" for c in s[2:])
 
 
 def _quote_hash(seller: str, criteria: str, window_seconds: int,
@@ -302,11 +316,12 @@ class Notch(gl.Contract):
         return p
 
     def _index(self, table: TreeMap[str, str], key: str, payment_id: str) -> None:
-        raw = table.get(key.lower(), "")
+        key = _addr_str(key)
+        raw = table.get(key, "")
         ids = json.loads(raw) if raw else []
         if payment_id not in ids:
             ids.append(payment_id)
-            table[key.lower()] = json.dumps(ids)
+            table[key] = json.dumps(ids)
 
     def _reserve_for(self, amount_atto: int) -> int:
         """What a payment holds against the seller's bond: the amount a false
@@ -384,6 +399,7 @@ class Notch(gl.Contract):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} amount must be positive")
         if not _valid_addr(asset):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} asset must be a token address")
+        asset = _addr_str(asset)   # the CLI delivers 40-hex args as Address objects
 
         qh = _quote_hash(addr, crit, w, str(amount), asset)
         if self.quotes.get(qh) is not None:
@@ -433,6 +449,9 @@ class Notch(gl.Contract):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} payment already recorded")
         if not _valid_addr(buyer):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} buyer must be an address")
+        # Normalize ONCE at the boundary: the CLI delivers 40-hex args as
+        # Address objects, and everything below assumes a lowercase hex str.
+        buyer = _addr_str(buyer)
         q = self.quotes.get(str(quote_hash))
         if q is None:
             raise gl.vm.UserError(
@@ -456,7 +475,7 @@ class Notch(gl.Contract):
         now = self._clock()
         self.payments[pid] = Payment(
             payment_id=pid, quote_hash=q.quote_hash, seller=q.seller,
-            buyer=buyer.lower(), amount_atto=q.amount_atto,
+            buyer=buyer, amount_atto=q.amount_atto,
             state="AWAITING_RECEIPT", recorded_at=u256(now),
             r_body_sha256="", r_excerpt_sha256="", r_excerpt_len=u256(0),
             r_submitted_at=u256(0), window_ends=u256(0),
@@ -801,7 +820,7 @@ Respond ONLY with JSON:
 
     @gl.public.view
     def get_seller(self, addr: str) -> str:
-        s = self.sellers.get(str(addr).lower())
+        s = self.sellers.get(_addr_str(addr))
         if s is None:
             return ""
         return json.dumps({
@@ -859,7 +878,7 @@ Respond ONLY with JSON:
     def get_payments_for(self, addr: str, role: str, offset: str = "0") -> str:
         """Paged, newest first, capped at 50 (S10)."""
         table = self.seller_payments if str(role) == "seller" else self.buyer_payments
-        raw = table.get(str(addr).lower(), "")
+        raw = table.get(_addr_str(addr), "")
         ids = json.loads(raw) if raw else []
         off = max(0, _as_int(offset, 0))
         end = len(ids) - off

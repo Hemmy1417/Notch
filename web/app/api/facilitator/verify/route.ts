@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import type { Hex } from "viem";
 import { INVALID, type VerifyResult } from "@/lib/x402/facilitator";
 import { SUPPORTED_KINDS } from "@/lib/x402/notch";
+import { domainFor, verifyAuthorizationSignature } from "@/lib/x402/eip3009";
+
+const NETWORK_CHAIN: Record<string, number> = { "base-sepolia": 84532 };
 
 /**
  * POST /api/facilitator/verify
@@ -87,9 +91,21 @@ export async function POST(req: NextRequest) {
   if (Number(auth.validBefore) <= now) return fail(INVALID.EXPIRED);
   if (Number(auth.validAfter) > now) return fail(INVALID.NOT_YET_VALID);
 
-  // Signature recovery against the token's EIP-712 domain lands in Phase 3
-  // with real settlement. Until then this endpoint validates structure and
-  // terms only, and says so rather than implying more.
+  // The real check: recover the signer against the token's EIP-712 domain.
+  // An authorization whose signature does not belong to `from` is not a
+  // payment — it is a claim about someone else's money.
+  const chainId = NETWORK_CHAIN[pay.network];
+  const domain = chainId ? domainFor(chainId, need.asset) : null;
+  if (!domain) {
+    return fail(INVALID.NETWORK);
+  }
+  const genuine = await verifyAuthorizationSignature(
+    domain, auth, pay.payload.signature as Hex,
+  );
+  if (!genuine) {
+    return fail(INVALID.SIGNATURE);
+  }
+
   const result: VerifyResult = { isValid: true, payer: auth.from };
   return NextResponse.json(result);
 }

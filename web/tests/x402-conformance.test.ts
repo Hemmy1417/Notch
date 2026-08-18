@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { PaymentRequirementsSchema as X402Schema } from "x402/types";
 import { buildProtectedQuote, quoteHashOf, paymentRequiredBody } from "@/lib/x402/quote";
+import { quoteHash } from "@/lib/x402/quote-hash";
 import { notchTermsOf, isProtected, NotchTermsSchema } from "@/lib/x402/notch";
 import { meetsFloor, MIN_PROTECTED_ATOMIC } from "@/lib/config";
 
@@ -94,9 +95,15 @@ describe("the quote hash binds what was promised", () => {
   });
 
   /**
-   * Every field below changes what was promised or what it costs. If any one
-   * of them could move without changing the hash, a seller could sign a
-   * receipt naming terms the buyer never agreed to.
+   * Every field below changes what was promised or what it costs — the five
+   * fields of the quote's on-chain identity. If any one of them could move
+   * without changing the hash, a seller could sign a receipt naming terms the
+   * buyer never agreed to.
+   *
+   * resource, payTo and network are deliberately ABSENT: they are not part of
+   * the contract's quote identity (see the test below), and an earlier
+   * version of this hash that bound them is exactly what made the 402 serve a
+   * hash the court could never compute.
    */
   it("changes when any promised term changes", () => {
     const base = quoteHashOf(BASE);
@@ -105,10 +112,7 @@ describe("the quote hash binds what was promised", () => {
       ["criteria", { criteria: BASE.criteria + " Also anything goes." }],
       ["window", { windowSeconds: 601 }],
       ["seller", { seller: "0x2222222222222222222222222222222222222222" }],
-      ["payTo", { payTo: "0x2222222222222222222222222222222222222222" }],
       ["asset", { asset: "0x0000000000000000000000000000000000000002" }],
-      ["network", { network: "base" }],
-      ["resource", { resource: "https://notch.example/api/other" }],
     ];
     for (const [name, patch] of mutations) {
       expect(quoteHashOf({ ...BASE, ...patch }), `${name} did not move the hash`)
@@ -176,5 +180,31 @@ describe("the price floor is real, and stated", () => {
 
   it("states the floor as one dollar at six decimals", () => {
     expect(MIN_PROTECTED_ATOMIC).toBe(BigInt(1_000_000));
+  });
+
+  it("the served hash IS the contract's hash — one canonicalization exists", () => {
+    // The bug this pins: an earlier quoteHashOf had its own richer canonical
+    // form, so the 402 served a hash the contract could never compute. The
+    // quote registered on the court and then could not be found under the
+    // served hash — caught live, in the E2E, after every unit test passed.
+    // The 402's hash and the contract-parity hash must be THE SAME FUNCTION.
+    const quote = buildProtectedQuote(BASE);
+    const served = notchTermsOf(quote.extra)!.quoteHash;
+    expect(served).toBe(quoteHash({
+      seller: BASE.seller,
+      criteria: BASE.criteria,
+      windowSeconds: BASE.windowSeconds,
+      amountAtto: BASE.maxAmountRequired,
+      asset: BASE.asset,
+    }));
+  });
+
+  it("resource and payTo are deliberately NOT part of the quote identity", () => {
+    // A seller may serve one quote from many hosts, and payTo equals the
+    // bonded seller in every Notch flow. Binding them would fracture one
+    // quote into many hashes the contract has never heard of.
+    const a = quoteHashOf(BASE);
+    expect(quoteHashOf({ ...BASE, resource: "https://elsewhere.example/api" })).toBe(a);
+    expect(quoteHashOf({ ...BASE, payTo: "0x" + "77".repeat(20) })).toBe(a);
   });
 });
