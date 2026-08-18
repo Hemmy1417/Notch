@@ -1,0 +1,9 @@
+﻿# Notch root
+node_modules/
+.next/
+.env
+.env.local
+!.env.example
+__pycache__/
+*.pyc
+.DS_Store
