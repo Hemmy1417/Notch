@@ -39,7 +39,6 @@ function info(msg) { console.log(`    ${msg}`); }
 function die(msg) { console.error(`\n✗ ${msg}`); process.exit(1); }
 
 const keys = JSON.parse(readFileSync(KEYS_FILE, "utf-8"));
-const buyer = privateKeyToAccount(keys.buyerPk);
 const seller = privateKeyToAccount(keys.sellerPk);
 const CONTRACT = (readFileSync(ENV_FILE, "utf-8").match(/^NEXT_PUBLIC_CONTRACT_ADDRESS=(0x[0-9a-fA-F]{40})/m) || [])[1];
 
