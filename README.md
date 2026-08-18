@@ -198,6 +198,11 @@ The panel is deliberately caged:
 | genvm-lint | clean (one advisory: the intentional LLM-error resampling exception) |
 | Deployed byte-match | `genlayer code` output matches the repo source, whitespace-normalized |
 
+The adversarial surface — prompt injection inside signed evidence, digest
+forgery, bond overlap, operator overreach, clock outage, stuck disputes — is
+mapped attack-by-attack to its guard and its proof in
+[`docs/STRESS_TEST.md`](docs/STRESS_TEST.md).
+
 Four bugs that every green unit test missed were caught by running the real
 arcs live — two canonicalizations of the quote hash, x402's silent EIP-712
 domain fallback, the CLI's Address auto-typing, and a payout API that the
