@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Nav } from "../../../components/Nav";
+import { ConsoleShell } from "../../../components/ConsoleShell";
+import { Hash } from "../../../components/Hash";
 import { formatUsdc } from "@/lib/config";
+import { ago, isoUtc, fmtGen } from "@/lib/fmt";
 import {
-  getPayment, getQuote,
+  getPaymentCached, getQuote,
   type CourtPayment, type CourtQuote,
 } from "@/lib/server/court";
 
 /**
- * One payment's full record, read live: the terms it was paid under, the
- * digests the seller signed for, the dispute if one was filed, and the
- * ruling with its reasoning. The page renders what the chain says and
- * nothing else.
+ * One payment's record, curated: the state and its meaning up top, compact
+ * facts with truncated copy-to-clipboard hashes, the terms behind a fold,
+ * and the ruling — the product — featured. Everything is a live chain read.
  */
 export const revalidate = 30;
 
@@ -28,19 +29,14 @@ type Dispute = {
 };
 
 const STATE_LINE: Record<string, string> = {
-  AWAITING_RECEIPT: "Recorded on the court; the seller has not yet anchored a receipt. No receipt, no release.",
-  WINDOW: "Receipted and inside the challenge window. If nobody challenges, release is automatic.",
-  DISPUTED: "Challenged, bond posted. The panel will read only bytes that hash to the seller's signed digest.",
+  AWAITING_RECEIPT: "Recorded; the seller has not yet anchored a receipt. No receipt, no release.",
+  WINDOW: "Receipted and inside the challenge window. Unchallenged, it releases automatically.",
+  DISPUTED: "Challenged, bond posted. The panel reads only bytes matching the seller's signed digest.",
   RELEASABLE: "Released by rule. The facilitator may submit the held authorization.",
   REFUND_DUE: "Refund by expiry: the authorization will never be submitted. The buyer's money never moved.",
   SETTLED: "Settled on the rail; the reference below is the rail's own record.",
   REFUNDED: "Closed. The authorization expired unsubmitted — the refund cost nothing and touched nothing.",
 };
-
-function epoch(ts: number): string {
-  if (!ts) return "—";
-  return new Date(ts * 1000).toISOString().replace(".000Z", "Z");
-}
 
 export default async function PaymentRecord({ params }: Params) {
   const { id } = await params;
@@ -49,7 +45,7 @@ export default async function PaymentRecord({ params }: Params) {
   let q: CourtQuote | null = null;
   let readError: string | null = null;
   try {
-    p = await getPayment(id);
+    p = await getPaymentCached(id);
     if (p) q = await getQuote(p.quote_hash);
   } catch (e) {
     readError = e instanceof Error ? e.message : "read failed";
@@ -57,7 +53,7 @@ export default async function PaymentRecord({ params }: Params) {
 
   if (readError) {
     return (
-      <Shell>
+      <Shell id={id}>
         <h1 className="t-heading-lg">The read failed.</h1>
         <p className="t-body t-body-dim" style={{ marginTop: 18 }}>
           StudioNet did not answer:{" "}
@@ -70,147 +66,160 @@ export default async function PaymentRecord({ params }: Params) {
 
   if (!p) {
     return (
-      <Shell>
+      <Shell id={id}>
         <h1 className="t-heading-lg">No payment with this id.</h1>
         <p className="t-body t-body-dim" style={{ marginTop: 18 }}>
           <span className="t-mono">{id}</span> is not on the court. Payments
-          appear here once the facilitator records the hold.
-        </p>
-        <p style={{ marginTop: 30 }}>
-          <Link href="/console" className="ghost ghost-lit">← Back to the console</Link>
+          appear once the facilitator records a hold.
         </p>
       </Shell>
     );
   }
 
   const d = p.dispute as Dispute | null;
+  const lastTouch =
+    p.ruling?.ruled_at || d?.filed_at || p.receipt?.submitted_at || 0;
 
   return (
-    <Shell>
-      <p className="t-label">Payment record</p>
-      <h1 className="t-heading-lg breakable" style={{ marginTop: 14 }}>{p.payment_id}</h1>
-      <p className="row" style={{ marginTop: 24, gap: 18, flexWrap: "wrap" }}>
+    <Shell id={id}>
+      {/* header: state, meaning, size, recency */}
+      <div className="row" style={{ gap: 20, flexWrap: "wrap", alignItems: "baseline" }}>
+        <h1 className="t-heading-lg breakable" style={{ margin: 0 }}>{p.payment_id}</h1>
+      </div>
+      <div className="row" style={{ marginTop: 20, gap: 20, flexWrap: "wrap" }}>
         <span className={`state st-${p.state}`} style={{ fontSize: 14 }}>{p.state}</span>
-        <span className="t-mono">{formatUsdc(p.amount_atto)}</span>
-      </p>
+        <span className="t-mono-lg">{formatUsdc(p.amount_atto)}</span>
+        {lastTouch ? (
+          <span className="t-caption" title={isoUtc(lastTouch)}>{ago(lastTouch)}</span>
+        ) : null}
+      </div>
       <p className="t-body t-body-dim" style={{ marginTop: 16 }}>
         {STATE_LINE[p.state] ?? ""}
       </p>
 
-      {/* parties + terms */}
-      <section className="section" style={{ paddingTop: 60 }}>
+      {/* the ruling first when there is one — it is the product */}
+      {p.ruling && d ? (
+        <section className="section" style={{ paddingTop: 72 }}>
+          <div className="split-rev">
+            <div>
+              <p className="t-label t-label-spark">The ruling</p>
+              <p className={`state st-${p.state}`} style={{ marginTop: 16, fontSize: 15 }}>
+                {p.ruling.verdict}
+              </p>
+              <blockquote style={{ margin: "18px 0 0" }}>
+                <p className="ruling-quote" style={{ fontSize: "clamp(20px, 2.2vw, 27px)" }}>
+                  &ldquo;{p.ruling.reason}&rdquo;
+                </p>
+              </blockquote>
+              <p className="t-caption" style={{ marginTop: 18 }} title={isoUtc(p.ruling.ruled_at)}>
+                Ruled {ago(p.ruling.ruled_at)} by validator consensus.
+                Confidence is advisory — only the verdict moves money.
+              </p>
+            </div>
+            <div style={{ alignSelf: "center" }}>
+              <p className="t-label t-label-iris">The challenge</p>
+              <p className="t-body t-body-dim" style={{ marginTop: 14, fontSize: 16 }}>
+                {d.claim}
+              </p>
+              <dl className="facts" style={{ marginTop: 24 }}>
+                <dt className="t-label">Challenger</dt>
+                <dd><Hash value={d.challenger} /></dd>
+                <dt className="t-label">Bond</dt>
+                <dd className="t-mono">{fmtGen(d.bond_atto)} GEN</dd>
+              </dl>
+            </div>
+          </div>
+        </section>
+      ) : d ? (
+        <section className="section" style={{ paddingTop: 72 }}>
+          <p className="t-label t-label-iris">The challenge — awaiting adjudication</p>
+          <p className="t-body t-body-dim" style={{ marginTop: 14, maxWidth: "52ch" }}>
+            {d.claim}
+          </p>
+          <p className="t-caption" style={{ marginTop: 16, maxWidth: "52ch" }}>
+            Anyone may submit the delivered bytes for judgment — the contract
+            verifies them against the seller&rsquo;s digest before any panel
+            is consulted.
+          </p>
+        </section>
+      ) : null}
+
+      {/* the record: compact facts */}
+      <section className="section" style={{ paddingTop: 72 }}>
         <div className="split">
           <div>
-            <p className="t-label">Parties</p>
+            <p className="t-label">Parties &amp; terms</p>
             <dl className="facts" style={{ marginTop: 18 }}>
               <dt className="t-label">Seller</dt>
-              <dd className="t-mono breakable">{p.seller}</dd>
+              <dd><Hash value={p.seller} /></dd>
               <dt className="t-label">Buyer</dt>
-              <dd className="t-mono breakable">{p.buyer}</dd>
+              <dd><Hash value={p.buyer} /></dd>
               <dt className="t-label">Quote</dt>
-              <dd className="t-mono breakable">{p.quote_hash}</dd>
+              <dd><Hash value={p.quote_hash} /></dd>
               <dt className="t-label">Window ends</dt>
-              <dd className="t-mono">{epoch(p.window_ends)}</dd>
+              <dd className="t-mono" title={isoUtc(p.window_ends)}>{ago(p.window_ends)}</dd>
               {p.settle_ref ? (
                 <>
                   <dt className="t-label">Settle ref</dt>
-                  <dd className="t-mono breakable">{p.settle_ref}</dd>
+                  <dd><Hash value={p.settle_ref} /></dd>
                 </>
               ) : null}
             </dl>
           </div>
-          {q ? (
+          {p.receipt ? (
             <div>
-              <p className="t-label t-label-spark">What counted as delivery — fixed before payment</p>
-              <p className="prose-block" style={{ marginTop: 18 }}>{q.criteria}</p>
+              <p className="t-label">The seller&rsquo;s receipt</p>
+              <dl className="facts" style={{ marginTop: 18 }}>
+                <dt className="t-label">Body digest</dt>
+                <dd><Hash value={p.receipt.body_sha256} /></dd>
+                <dt className="t-label">Excerpt digest</dt>
+                <dd><Hash value={p.receipt.excerpt_sha256} /></dd>
+                <dt className="t-label">Anchored</dt>
+                <dd className="t-mono" title={isoUtc(p.receipt.submitted_at)}>{ago(p.receipt.submitted_at)}</dd>
+              </dl>
+              <p className="t-caption" style={{ marginTop: 16, maxWidth: "44ch" }}>
+                A panel may only read bytes hashing to the excerpt digest — the
+                seller&rsquo;s own signature decides what is admissible.
+              </p>
             </div>
           ) : null}
         </div>
       </section>
 
-      {/* receipt */}
-      {p.receipt ? (
+      {/* the terms, behind a fold */}
+      {q ? (
         <section className="section" style={{ paddingTop: 60 }}>
-          <p className="t-label">The seller&rsquo;s receipt — anchored by their own signed write</p>
-          <dl className="facts" style={{ marginTop: 18 }}>
-            <dt className="t-label">Body sha256</dt>
-            <dd className="t-mono breakable">{p.receipt.body_sha256}</dd>
-            <dt className="t-label">Excerpt sha256</dt>
-            <dd className="t-mono breakable">{p.receipt.excerpt_sha256}</dd>
-            <dt className="t-label">Excerpt length</dt>
-            <dd className="t-mono">{p.receipt.excerpt_len} bytes</dd>
-            <dt className="t-label">Anchored</dt>
-            <dd className="t-mono">{epoch(p.receipt.submitted_at)}</dd>
-          </dl>
-          <p className="t-caption" style={{ marginTop: 16, maxWidth: "62ch" }}>
-            A dispute panel may only read bytes that hash to the excerpt digest
-            above — the seller&rsquo;s own signature decides what is admissible.
-          </p>
-        </section>
-      ) : null}
-
-      {/* dispute + ruling */}
-      {d ? (
-        <section className="section" style={{ paddingTop: 60 }}>
-          <div className="split">
-            <div>
-              <p className="t-label t-label-iris">The challenge</p>
-              <p className="prose-block" style={{ marginTop: 18 }}>{d.claim}</p>
-              <dl className="facts" style={{ marginTop: 24 }}>
-                <dt className="t-label">Challenger</dt>
-                <dd className="t-mono breakable">{d.challenger}</dd>
-                <dt className="t-label">Bond</dt>
-                <dd className="t-mono">{d.bond_atto} atto GEN</dd>
-                <dt className="t-label">Filed</dt>
-                <dd className="t-mono">{epoch(d.filed_at)}</dd>
-              </dl>
-              <p className="t-caption" style={{ marginTop: 16, maxWidth: "52ch" }}>
-                A challenge is advocacy from an interested party, never proof.
-                The panel judges the criteria against the seller-signed bytes.
-              </p>
-            </div>
-            {p.ruling ? (
-              <div>
-                <p className="t-label t-label-spark">The ruling</p>
-                <p className={`state st-${p.state}`} style={{ marginTop: 18, fontSize: 15 }}>
-                  {p.ruling.verdict}
-                </p>
-                <blockquote style={{ margin: "18px 0 0" }}>
-                  <p className="ruling-quote" style={{ fontSize: "clamp(19px, 2vw, 25px)" }}>
-                    &ldquo;{p.ruling.reason}&rdquo;
-                  </p>
-                </blockquote>
-                <p className="t-caption" style={{ marginTop: 18 }}>
-                  Ruled {epoch(p.ruling.ruled_at)}. Confidence is advisory and
-                  gates nothing — only the verdict moves money.
-                </p>
-              </div>
-            ) : (
-              <div>
-                <p className="t-label">Awaiting adjudication</p>
-                <p className="t-body t-body-dim" style={{ marginTop: 18 }}>
-                  Anyone may submit the delivered bytes for judgment — the
-                  contract verifies them against the seller&rsquo;s digest
-                  before any panel is consulted.
-                </p>
-              </div>
-            )}
-          </div>
+          <details className="fold">
+            <summary>What counted as delivery — the terms, verbatim</summary>
+            <p className="prose-block" style={{ marginTop: 24 }}>{q.criteria}</p>
+            <p className="t-caption" style={{ marginTop: 16 }}>
+              Fixed and hashed before payment; the quote hash above commits to
+              exactly this text.
+            </p>
+          </details>
         </section>
       ) : null}
 
       <p className="section section-tail" style={{ paddingTop: 60 }}>
-        <Link href="/console" className="ghost ghost-lit">← Back to the console</Link>
+        <Link href="/console/payments" className="ghost ghost-lit">← All payments</Link>
       </p>
     </Shell>
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <main>
-      <Nav active="console" />
-      <div className="wrap section" style={{ paddingTop: 36 }}>{children}</div>
-    </main>
+    <ConsoleShell>
+      <div className="wrap section" style={{ paddingTop: 48 }}>
+        <div className="crumb" style={{ marginBottom: 36 }}>
+          <Link href="/console">Console</Link>
+          <span className="sep">/</span>
+          <Link href="/console/payments">Payments</Link>
+          <span className="sep">/</span>
+          <span className="here">{id}</span>
+        </div>
+        {children}
+      </div>
+    </ConsoleShell>
   );
 }
