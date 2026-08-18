@@ -1,0 +1,47 @@
+Phase 1: the facilitator that holds
+
+Notch is an x402 facilitator with one difference: it does not submit the
+buyer's payment authorization. It holds it.
+
+That is the escrow. x402's own docs state a facilitator cannot steal — the
+payer's EIP-712 authorization names `to` and `value`, so tampering fails the
+signature check — but CAN withhold. Notch is built on that fact rather than
+around it: the buyer's USDC never leaves their wallet, release means we submit,
+refund means we never do and the authorization expires at validBefore. Nothing
+is ever custodied, and we inherit exactly x402's documented trust profile.
+
+What Notch adds is that the withhold-or-release decision is not the
+facilitator's opinion but a published ruling anyone can check.
+
+Shipped:
+- /verify, /settle, /supported per the x402 spec, built to the v1 wire shape
+  that x402@1.2.0 actually sends (maxAmountRequired, named networks) rather
+  than the v2 shape in the spec repo that no client emits yet
+- the Notch extension advertised on /supported, so a buyer's agent discovers
+  BEFORE paying that this facilitator holds, requires a signed delivery
+  receipt, and runs a challenge window
+- 35 tests, typecheck and lint clean
+
+Two things the tests pin deliberately:
+
+/settle does NOT settle. This is the single behaviour that makes Notch
+different and the easiest thing to "fix" by accident — a future contributor
+completing the endpoint would silently delete the escrow, make the challenge
+window decorative, and leave every dispute judged after the money was gone. A
+test now fails if that happens.
+
+Nothing fabricates a transaction hash or a signer address. x402 clients read
+`transaction` as proof the money moved; inventing one would make a held payment
+look settled to every downstream tool. /supported returns an empty signers map
+because settlement is unbuilt, and an empty map is honest where a made-up
+address is a lie a judge could catch with one call.
+
+Writing the tests found a real bug: /settle only rejected input that failed
+JSON.parse, so a junk body was recorded as a HELD payment with no authorization
+behind it — a hold over nothing that would later look releasable. It now
+validates structure, because anything we agree to hold must be something we
+could actually submit.
+
+Testnet only, deliberately. Pointing a held-authorization facilitator at
+mainnet before the settlement path is tested and reviewed would risk other
+people's money to make a demo look better.

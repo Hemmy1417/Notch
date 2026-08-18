@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The tally: a stick, split lengthwise, with a notch cut across both
+       halves. The cut only lines up when the two halves are the same stick —
+       which is the whole mechanism. Copper on graphite. -->
+  <rect width="32" height="32" rx="6" fill="#121419"/>
+  <!-- the two halves, parted -->
+  <rect x="9"  y="5" width="5.5" height="22" rx="1.4" fill="#E9E4D9"/>
+  <rect x="17.5" y="5" width="5.5" height="22" rx="1.4" fill="#9A9AA8"/>
+  <!-- the notch, cut across both -->
+  <path d="M9 15.2 L14.5 12.4 L14.5 17.6 Z" fill="#C4703F"/>
+  <path d="M23 15.2 L17.5 12.4 L17.5 17.6 Z" fill="#C4703F"/>
+</svg>
