@@ -1,4 +1,4 @@
-# v0.1.0
+# v0.1.2
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
@@ -135,6 +135,22 @@ def _quote_hash(seller: str, criteria: str, window_seconds: int,
         "asset": asset.lower(),
     }, sort_keys=True, separators=(",", ":"))
     return _sha256_hex(canon)
+
+
+# ── EOA payout proxy ─────────────────────────────────────────────────────────
+# emit_transfer at a bare wallet strands value; an empty evm interface proxy
+# delivers it. All transfers ride on="finalized" so value moves only once the
+# decision has survived to finality. (There is no gl.native transfer API in
+# the runner — a stub that invented one let every payout path pass tests
+# while failing live.)
+
+@gl.evm.contract_interface
+class _Payee:
+    class View:
+        pass
+
+    class Write:
+        pass
 
 
 # ── storage ──────────────────────────────────────────────────────────────────
@@ -374,7 +390,7 @@ class Notch(gl.Contract):
                 "the rest is standing behind live payments")
         s.bond_atto = u256(int(s.bond_atto) - amount)
         self.pot_atto = u256(int(self.pot_atto) - amount)
-        gl.native.transfer(gl.message.sender_address, u256(amount))
+        self._send(gl.message.sender_address, amount)
         return json.dumps({"seller": addr, "withdrawn": str(amount),
                            "bond_atto": str(int(s.bond_atto))})
 
@@ -602,6 +618,9 @@ class Notch(gl.Contract):
         criteria = _defang(q.criteria)
         claim = _defang(p.d_claim)
         safe_excerpt = _defang(ex)
+        # Plain locals only past this line: the closure below runs in nondet
+        # mode, where reading storage objects is unsupported.
+        digest16 = str(p.r_excerpt_sha256)[:16]
 
         def deliberate() -> str:
             prompt = f"""You are the neutral adjudicator for NOTCH, a dispute layer for machine-to-machine payments.
@@ -615,7 +634,7 @@ THE BUYER'S CHALLENGE (advocacy from an interested party, never proof):
 {claim}
 
 THE DELIVERED CONTENT (anchored to the seller's own signed receipt):
-<<<DELIVERED CONTENT | sha256 {p.r_excerpt_sha256[:16]}>>>
+<<<DELIVERED CONTENT | sha256 {digest16}>>>
 {safe_excerpt}
 <<<END DELIVERED CONTENT>>>
 
@@ -678,9 +697,9 @@ Respond ONLY with JSON:
             s.slashed_atto = u256(int(s.slashed_atto) + slash)
             s.receipts_broken = u256(int(s.receipts_broken) + 1)
             self._release_reserve(s, p)
-            # bond home + slash as damages, one transfer each
+            # bond home + slash as damages, one transfer
             self.pot_atto = u256(int(self.pot_atto) - bond - slash)
-            gl.native.transfer(Address(p.buyer), u256(bond + slash))
+            self._send(p.buyer, bond + slash)
             self.refund_count = u256(int(self.refund_count) + 1)
         elif verdict == "AS_DESCRIBED":
             # The record held. The challenge cost its bond, which goes to the
@@ -689,7 +708,7 @@ Respond ONLY with JSON:
             s.receipts_upheld = u256(int(s.receipts_upheld) + 1)
             self._release_reserve(s, p)
             self.pot_atto = u256(int(self.pot_atto) - bond)
-            gl.native.transfer(Address(p.seller), u256(bond))
+            self._send(p.seller, bond)
             self.upheld_count = u256(int(self.upheld_count) + 1)
         else:
             # INCONCLUSIVE: the panel could not establish it either way.
@@ -699,7 +718,7 @@ Respond ONLY with JSON:
             p.state = "RELEASABLE"
             self._release_reserve(s, p)
             self.pot_atto = u256(int(self.pot_atto) - bond)
-            gl.native.transfer(Address(p.buyer), u256(bond))
+            self._send(p.buyer, bond)
             self.inconclusive_count = u256(int(self.inconclusive_count) + 1)
 
         return json.dumps({"payment_id": p.payment_id, "verdict": verdict,
@@ -709,6 +728,13 @@ Respond ONLY with JSON:
         reserve = self._reserve_for(int(p.amount_atto))
         cur = int(s.reserved_atto)
         s.reserved_atto = u256(cur - reserve if cur >= reserve else 0)
+
+    def _send(self, to, amount: int) -> None:
+        # on="finalized" is load-bearing: value moves only once the decision
+        # has survived to finality (the appeal round, larger validator set).
+        if amount > 0:
+            addr = to if isinstance(to, Address) else Address(_addr_str(to))
+            _Payee(addr).emit_transfer(value=u256(amount), on="finalized")
 
     # ── deterministic exits ──────────────────────────────────────────────────
 
@@ -776,7 +802,7 @@ Respond ONLY with JSON:
             self._release_reserve(s, p)
             if bond > 0:
                 self.pot_atto = u256(int(self.pot_atto) - bond)
-                gl.native.transfer(Address(p.d_challenger), u256(bond))
+                self._send(p.d_challenger, bond)
             return json.dumps({"payment_id": p.payment_id, "state": p.state,
                                "reason": "dispute never resolved; bond refunded"})
 

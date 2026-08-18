@@ -210,3 +210,20 @@ def test_the_operator_cannot_touch_bonds_or_rulings(module, c):
     # and mark_settled cannot skip the decision states
     with pytest.raises(module.gl.vm.UserError, match="RELEASABLE or"):
         c.mark_settled(pid, "0xskip")
+
+
+# ── the payout API is the runner's, not an invention ─────────────────────────
+
+def test_no_invented_native_transfer_api_in_the_source(module):
+    """The runner has no gl.native; an earlier stub invented it and 45 green
+    tests certified payout code that crashed at the first live ruling. The
+    source must use the EOA proxy (emit_transfer on='finalized') and nothing
+    else, and the stub must refuse unknown gl attributes like the runner."""
+    src = open(str(module.__file__ if hasattr(module, "__file__") else ""), encoding="utf-8").read() if hasattr(module, "__file__") else ""
+    if not src:
+        import pathlib
+        src = (pathlib.Path(__file__).resolve().parents[2] / "contracts" / "notch.py").read_text(encoding="utf-8")
+    assert "gl.native." not in src   # the call form; prose may name the lesson
+    assert 'on="finalized"' in src
+    with pytest.raises(AttributeError):
+        module.gl.native

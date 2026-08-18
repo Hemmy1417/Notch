@@ -8,9 +8,16 @@ The stub's design carries two hard-won lessons from siblings:
   divergence guard that was broken in production stayed green for weeks. Every
   source here can be skewed or killed independently.
 
-  TRANSFERS ARE RECORDED, NOT MOCKED AWAY. gl.native.transfer appends to a
+  TRANSFERS ARE RECORDED, NOT MOCKED AWAY. The EOA payout proxy appends to a
   ledger the tests can sum, so wei conservation is checkable after every
   scenario rather than asserted by hope.
+
+  THE STUB REFUSES WHAT THE RUNNER REFUSES. An earlier version of this file
+  invented gl.native.transfer — an API the real runner does not have — and
+  45 green tests certified payout code that crashed on-chain at the first
+  real ruling. gl here now raises AttributeError for unknown attributes,
+  exactly like the runner, so an invented API fails the suite instead of
+  the demo.
 """
 import hashlib
 import importlib.util
@@ -93,10 +100,23 @@ class _Public:
     write = _WriteDeco()
 
 
-class _Native:
+class _EvmProxyInstance:
+    """What calling an empty @gl.evm.contract_interface proxy at an address
+    yields. emit_transfer(value=..., on="finalized") is the real payout API;
+    it records into the ledger the conservation tests sum."""
+    def __init__(self, addr):
+        self._addr = addr
+
+    def emit_transfer(self, value=0, on="finalized"):
+        if on != "finalized":
+            raise AssertionError("payouts must ride on='finalized'")
+        _SENT.append((str(self._addr).lower(), int(value)))
+
+
+class _EvmModule:
     @staticmethod
-    def transfer(to, amount):
-        _SENT.append((str(to).lower(), int(amount)))
+    def contract_interface(cls):
+        return lambda addr: _EvmProxyInstance(addr)
 
 
 class _NondetWeb:
@@ -152,7 +172,9 @@ class _GL:
     eq_principle = _EqPrinciple
     public = _Public()
     vm = _VmModule
-    native = _Native()
+    evm = _EvmModule()
+    # NO gl.native here — the real runner has no such attribute, and neither
+    # may the stub. An unknown gl.<attr> raises AttributeError, as live.
 
     class message:
         sender_address = OPERATOR

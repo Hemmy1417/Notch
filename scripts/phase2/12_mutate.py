@@ -52,7 +52,7 @@ MUTANTS = [
      "slash = min(self._reserve_for(int(p.amount_atto)), int(s.bond_atto))",
      "slash = 0"),
     ("S5: inconclusive punishes the challenger (bond kept)",
-     'self.pot_atto = u256(int(self.pot_atto) - bond)\n            gl.native.transfer(Address(p.buyer), u256(bond))\n            self.inconclusive_count',
+     'self.pot_atto = u256(int(self.pot_atto) - bond)\n            self._send(p.buyer, bond)\n            self.inconclusive_count',
      'self.inconclusive_count'),
     ("S17: stale-dispute exit removed",
      'if int(p.d_terminal_at) == 0 or now < int(p.d_terminal_at):',

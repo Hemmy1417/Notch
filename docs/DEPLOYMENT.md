@@ -4,13 +4,43 @@
 
 | | |
 |---|---|
-| Contract | `0x3b04440389416407194E7DD979577065c6EbfEfa` |
-| Deploy tx | `0xf636bba841443db16050711a7203da1ac1e7699fb849c1de6ea4dee72a14941a` |
-| Version | v0.1.1 |
-| Supersedes | `0x1E5e00ab…9f01` (v0.1.0 — Address-normalization fix below) |
+| Contract | `0x5d22edAE1e32f977b57b99B8d95D3A0097e5b517` |
+| Deploy tx | `0xf9ddf1490e8ad67f738ee4a31d804c6918334adfa5d9bb6be0255a399a67a3c7` |
+| Version | v0.1.2 |
+| Supersedes | `0x3b044403…fEfa` (v0.1.1 — payout-API fix below), `0x1E5e00ab…9f01` (v0.1.0 — Address-normalization fix) |
 | Deployer / operator | `0x10dbf82a8bb191bd1c082de5ef915e998aa5ccd7` |
 | Network | GenLayer StudioNet (chainId 61999), gasless |
 | Runner | pinned `py-genlayer:1jb45aa8…jpz09h6` |
+
+### v0.1.2 — the payout-API fix (live-fire bug #4)
+
+The first real adjudication on v0.1.1 reached a verdict — the validator panel
+ran, ruled on the seller-signed excerpt — and then crashed **paying the
+buyer**: every payout site called `gl.native.transfer`, an API that does not
+exist in the runner (`module 'genlayer.gl' has no attribute 'native'`). The
+test stub had *invented* that API, so 45 green tests certified payout code
+that could never run. No live path had ever sent GEN out of the contract:
+bonds arrive as payable receives, and the optimistic arc's finalize is
+storage-only — the dispute ruling was the first outbound transfer ever
+attempted, and it found the seam.
+
+Fixes, all mutation-checked:
+- Every transfer now rides the proven EOA payout proxy
+  (`@gl.evm.contract_interface` + `emit_transfer(value=…, on="finalized")`),
+  the exact pattern live-verified on a sibling deployment. `on="finalized"`
+  is load-bearing: value moves only once the ruling has survived to finality.
+- The stub no longer has `gl.native` — an unknown `gl.<attr>` now raises
+  `AttributeError` exactly like the runner, so an invented API fails the
+  suite instead of the demo. A source-level tripwire test pins this.
+- The nondet closure read `p.r_excerpt_sha256` (a storage object) inside the
+  prompt; the runner warns that reading storage in nondet mode is
+  unsupported. The digest is now hoisted to a plain local before the closure.
+
+Gate for this deploy: 46 direct tests green, mutation sweep **16/16 pinned**
+with accept-control, genvm-lint passed (the one standing advisory is the
+intentional LLM-error resampling `Exception` in the nondet closure), deployed
+code byte-matches `contracts/notch.py`, generator regenerates it byte for
+byte.
 
 ### Pre-deploy gate (all green)
 - genvm-lint: `ok:true` (one W004 advisory — the intentional `Exception` inside
@@ -90,3 +120,41 @@ reported that honestly as a dry run rather than inventing a hash.
    an Address OBJECT; `buyer.lower()` reverted on-chain while 44 stub-based
    tests stayed green. Every address-taking entry now normalizes via
    `_addr_str`, pinned by a test that passes an Address object.
+
+## Phase 4 — the dispute arc, live (2026-08-18)
+
+The headline proof, on v0.1.2 under real validators: a seller delivered
+`{"summary": "Sorry, I can't help with that request.", "sources": []}`
+against published criteria demanding a 200+ character on-topic summary and
+two cited sources — **and signed the delivery receipt anyway**. The buyer
+challenged (0.1 GEN bond), and a real panel read the seller-signed bytes:
+
+```text
+payment        pay_843a12d658f2a3cf
+verdict        NOT_AS_DESCRIBED  (confidence HIGH — advisory, gates nothing)
+reasoning      "The acceptance criteria require a summary of at least 200
+                characters addressing the topic and a sources array with at
+                least two entries each containing a url and claim. The
+                delivered JSON contains an apologetic short summary and an
+                empty sources array, violating both requirements."
+court state    REFUND_DUE — the authorization will never be submitted
+hold           REFUNDED — expires at validBefore
+seller record  1 broken receipt · 1,250,000 atto slashed (50% of amount)
+```
+
+Verified on-chain after the ruling: the seller's bond is 1 GEN minus
+exactly the slash; reserved exposure released to zero; the global pot
+equals the remaining bond precisely, meaning the challenge bond and the
+slash left the contract to the buyer — one finalized transfer, nothing
+stranded. The refund itself costs nothing and touches nothing: the held
+authorization simply expires.
+
+Both arcs — optimistic release (`pay_9261d354ceb85bb3`) and disputed
+refund (`pay_843a12d658f2a3cf`) — now stand on the same deployment.
+
+Known simplification, stated rather than hidden: quote amounts are in the
+payment asset's atomic units (USDC, 6 decimals) while bonds and slashes are
+GEN-denominated, so a $2.50 payment produces a microscopic slash in GEN
+terms. Production needs a rate mapping or GEN-denominated pricing; the
+mechanism — reserve, ruling, slash, routing — is what this deployment
+proves, and it moved the exact numbers the rules dictate.

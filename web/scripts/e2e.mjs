@@ -118,7 +118,7 @@ ok("the unpaid endpoint answers 402 — a real x402 quote");
 const sellerChain = createClient({ chain: studionet, endpoint: RPC, account: createAccount(keys.sellerPk) });
 const reader = createClient({ chain: studionet, endpoint: RPC });
 
-const TRANSIENT = /rate limit|429|-32029|failed to fetch|unreachable|doctype|not valid json|unknown rpc|unexpected token|502|503|504|timeout|econnreset/i;
+const TRANSIENT = /rate limit|429|-32029|failed to fetch|fetch failed|unreachable|doctype|not valid json|unknown rpc|unexpected token|502|503|504|timeout|econnreset|socket/i;
 
 async function courtRead(fn, args) {
   for (let i = 0; ; i++) {
@@ -149,7 +149,8 @@ function cliWrite(method, args) {
   // Operator writes go through the CLI, whose active unlocked account IS the
   // contract's operator. --args types: plain strings.
   const quoted = args.map((a) => `"${a}"`).join(" ");
-  const cmd = `genlayer write ${CONTRACT} ${method} --args ${quoted} --rpc ${RPC}`;
+  // 2>&1: the CLI prints its confirmation on stderr; merge before checking.
+  const cmd = `genlayer write ${CONTRACT} ${method} --args ${quoted} --rpc ${RPC} 2>&1`;
   info(`operator (CLI): ${method}`);
   const out = execSync(cmd, {
     cwd: ROOT, encoding: "utf-8", timeout: 300000,

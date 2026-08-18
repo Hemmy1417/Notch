@@ -111,19 +111,33 @@ export async function GET(req: NextRequest) {
   }
 
   // The hold is real. Deliver the work…
-  const body = {
-    summary:
-      "Notch demonstration report. This body is produced in exchange for a held " +
-      "x402 payment: the buyer's authorization is verified and retained by the " +
-      "facilitator rather than submitted, so the funds have not moved. The seller " +
-      "signs a delivery receipt over the hash of exactly these bytes, and that " +
-      "signature is the only evidence a future dispute will read.",
-    sources: [
-      { url: "https://docs.x402.org", claim: "x402's exact scheme is a push payment, irreversible once executed." },
-      { url: "https://eips.ethereum.org/EIPS/eip-3009", claim: "EIP-3009 authorizations are single-use, time-bounded, and name recipient and amount." },
-    ],
-    paymentId: settled.notch.paymentId,
-  };
+  //
+  // ?act=bad is the DEMO CONTROL for the dispute arc: the seller delivers
+  // something that plainly fails the published criteria — and signs the
+  // receipt for it anyway, because that is exactly the act the slash exists
+  // to punish. A real dishonest seller would not label themselves; this
+  // parameter exists so the dispute path can be demonstrated end to end
+  // without pretending the failure was an accident.
+  const misbehave = new URL(req.url).searchParams.get("act") === "bad";
+  const body = misbehave
+    ? {
+        summary: "Sorry, I can't help with that request.",
+        sources: [],
+        paymentId: settled.notch.paymentId,
+      }
+    : {
+        summary:
+          "Notch demonstration report. This body is produced in exchange for a held " +
+          "x402 payment: the buyer's authorization is verified and retained by the " +
+          "facilitator rather than submitted, so the funds have not moved. The seller " +
+          "signs a delivery receipt over the hash of exactly these bytes, and that " +
+          "signature is the only evidence a future dispute will read.",
+        sources: [
+          { url: "https://docs.x402.org", claim: "x402's exact scheme is a push payment, irreversible once executed." },
+          { url: "https://eips.ethereum.org/EIPS/eip-3009", claim: "EIP-3009 authorizations are single-use, time-bounded, and name recipient and amount." },
+        ],
+        paymentId: settled.notch.paymentId,
+      };
   const bodyText = JSON.stringify(body);
 
   // …and sign the tally for it.
