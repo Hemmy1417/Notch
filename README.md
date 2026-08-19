@@ -7,6 +7,8 @@
 <p align="center"><em>Evidence fixed before the money moves.</em><br>
 A dispute and chargeback layer for x402 agent payments, judged on GenLayer.</p>
 
+<p align="center"><strong><a href="https://notch-gen.vercel.app">notch-gen.vercel.app</a></strong> · live on GenLayer StudioNet</p>
+
 ---
 
 ## What this is
@@ -58,7 +60,7 @@ challenge inside its window. Everything else is machine-to-machine.
 | Contract version | v0.1.3 — deployed code byte-matches [`contracts/notch.py`](contracts/notch.py) |
 | Runner | pinned `py-genlayer:1jb45aa8…jpz09h6` |
 | Payment rail | Base Sepolia USDC (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`), x402 v1 wire format |
-| Web console | Vercel deploy pending — runs locally via `npm run dev` in `web/` |
+| Web console | **[notch-gen.vercel.app](https://notch-gen.vercel.app)** — reads the contract live |
 
 ## The lifecycle
 
