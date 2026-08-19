@@ -23,6 +23,7 @@
  * still be handled.
  */
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { Authorization } from "@/lib/x402/eip3009";
 
@@ -49,23 +50,43 @@ export interface HoldStore {
   list(): Promise<StoredHold[]>;
 }
 
-const DATA_DIR = path.join(process.cwd(), ".data");
-const FILE = path.join(DATA_DIR, "holds.json");
+// Prefer .data/ next to the app; fall back to the OS temp dir on hosts whose
+// project filesystem is read-only (Vercel and most serverless runtimes expose
+// only their temp dir as writable). The temp dir is per-instance and ephemeral
+// — fine for this dev-grade store, whose durable production replacement is the
+// Supabase adapter noted above. Resolved once, then reused.
+let resolvedDir: string | null = null;
+async function dataDir(): Promise<string> {
+  if (resolvedDir) return resolvedDir;
+  const preferred = path.join(process.cwd(), ".data");
+  try {
+    await fs.mkdir(preferred, { recursive: true });
+    // Probe writability — mkdir can succeed on a read-only mount for an
+    // already-present dir, so confirm we can actually write.
+    await fs.writeFile(path.join(preferred, ".probe"), "", "utf-8");
+    resolvedDir = preferred;
+  } catch {
+    resolvedDir = path.join(os.tmpdir(), "notch-holds");
+    await fs.mkdir(resolvedDir, { recursive: true }).catch(() => {});
+  }
+  return resolvedDir;
+}
 
 export class FileHoldStore implements HoldStore {
   private async read(): Promise<Record<string, StoredHold>> {
     try {
-      return JSON.parse(await fs.readFile(FILE, "utf-8"));
+      return JSON.parse(await fs.readFile(path.join(await dataDir(), "holds.json"), "utf-8"));
     } catch {
       return {};
     }
   }
 
   private async write(all: Record<string, StoredHold>): Promise<void> {
-    await fs.mkdir(DATA_DIR, { recursive: true });
-    const tmp = `${FILE}.tmp`;
+    const dir = await dataDir();
+    const file = path.join(dir, "holds.json");
+    const tmp = `${file}.tmp`;
     await fs.writeFile(tmp, JSON.stringify(all, null, 2), "utf-8");
-    await fs.rename(tmp, FILE);   // atomic on the same volume
+    await fs.rename(tmp, file);   // atomic on the same volume
   }
 
   async put(hold: Omit<StoredHold, "state" | "settleRef" | "createdAt" | "updatedAt">): Promise<StoredHold> {
