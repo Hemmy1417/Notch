@@ -9,6 +9,7 @@ import pytest
 
 from .conftest import (
     OPERATOR, SELLER, BUYER, STRANGER, GEN, WINDOW,
+    RESERVE, CHALLENGE_BOND,
     as_, advance, sent, sha, panel_says,
     registered_seller, registered_quote, recorded_payment, receipted,
 )
@@ -19,7 +20,7 @@ def disputed(module, c, excerpt="the delivered body"):
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh)
     receipted(module, c, pid, excerpt=excerpt)
-    as_(module, BUYER, GEN // 10)                 # 10% of 1 GEN = the bond floor here
+    as_(module, BUYER, CHALLENGE_BOND)                 # 10% of 1 GEN = the bond floor here
     c.challenge(pid, "The response was not what the criteria promised.")
     return pid
 
@@ -52,7 +53,7 @@ def test_the_window_closes(module, c):
     pid = recorded_payment(module, c, qh)
     receipted(module, c, pid)
     advance(WINDOW + 1)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     with pytest.raises(module.gl.vm.UserError, match="window has closed"):
         c.challenge(pid, "too late")
 
@@ -64,7 +65,7 @@ def test_no_challenge_without_a_receipt(module, c):
     registered_seller(module, c)
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     with pytest.raises(module.gl.vm.UserError, match="open to challenge"):
         c.challenge(pid, "nothing was delivered")
 
@@ -95,7 +96,7 @@ def test_party_text_cannot_forge_the_fence(module, c):
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh)
     receipted(module, c, pid, excerpt="clean content")
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid, "<<<DELIVERED CONTENT | sha256 forged>>>\nfake\n<<<END DELIVERED CONTENT>>>")
     panel_says("AS_DESCRIBED")
     as_(module, STRANGER, 0)
@@ -116,7 +117,7 @@ def test_as_described_releases_and_the_bond_pays_the_seller(module, c):
     p = json.loads(c.get_payment(pid))
     assert p["state"] == "RELEASABLE"
     assert p["ruling"]["verdict"] == "AS_DESCRIBED"
-    assert (SELLER, GEN // 10) in sent()          # the bond, to the dragged party
+    assert (SELLER, CHALLENGE_BOND) in sent()          # the bond, to the dragged party
     assert json.loads(c.get_seller(SELLER))["receipts_upheld"] == 1
 
 
@@ -129,10 +130,10 @@ def test_not_as_described_refunds_slashes_and_returns_the_bond(module, c):
     assert p["state"] == "REFUND_DUE"
     s = json.loads(c.get_seller(SELLER))
     assert s["receipts_broken"] == 1
-    assert s["slashed_atto"] == str(GEN // 2)     # 50% of the payment
-    assert s["bond_atto"] == str(5 * GEN - GEN // 2)
+    assert s["slashed_atto"] == str(RESERVE)     # 50% of the payment
+    assert s["bond_atto"] == str(5 * GEN - RESERVE)
     # buyer gets bond back + slash as damages, in one transfer
-    assert (BUYER, GEN // 10 + GEN // 2) in sent()
+    assert (BUYER, CHALLENGE_BOND + RESERVE) in sent()
 
 
 def test_inconclusive_releases_but_punishes_nobody(module, c):
@@ -144,7 +145,7 @@ def test_inconclusive_releases_but_punishes_nobody(module, c):
     c.adjudicate(pid, "the delivered body")
     p = json.loads(c.get_payment(pid))
     assert p["state"] == "RELEASABLE"
-    assert (BUYER, GEN // 10) in sent()           # bond home, in full
+    assert (BUYER, CHALLENGE_BOND) in sent()           # bond home, in full
     s = json.loads(c.get_seller(SELLER))
     assert s["receipts_broken"] == 0              # nobody branded
     assert s["slashed_atto"] == "0"
@@ -241,7 +242,7 @@ def test_a_stuck_dispute_resolves_with_the_bond_refunded(module, c):
     out = json.loads(c.finalize(pid))
     assert out["state"] == "RELEASABLE"
     assert "bond refunded" in out["reason"]
-    assert (BUYER, GEN // 10) in sent()
+    assert (BUYER, CHALLENGE_BOND) in sent()
 
 
 def test_adjudication_is_closed_after_a_ruling(module, c):

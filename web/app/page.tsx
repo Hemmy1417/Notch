@@ -9,9 +9,9 @@ import { Constellation } from "./components/Constellation";
  * live record in the console.
  */
 
-const PROOF_OPTIMISTIC = "pay_98b926f3ae2f1589";
-const PROOF_STRUCTURAL = "pay_843a12d658f2a3cf";
-const PROOF_SEMANTIC = "pay_5047729e03d30dcd";
+const PROOF_OPTIMISTIC = "pay_f19709fc2ada6624";
+const PROOF_STRUCTURAL = "pay_7e701d83f96c545f";
+const PROOF_SEMANTIC = "pay_7e69d93ff9df7a47";
 
 export default function Home() {
   return (
@@ -22,15 +22,15 @@ export default function Home() {
       <header className="wrap section" style={{ paddingTop: 36 }}>
         <div className="split" style={{ alignItems: "center" }}>
           <div>
-            <p className="t-label t-label-spark">A recourse layer for x402</p>
+            <p className="t-label t-label-spark">Recourse for AI agent payments</p>
             <h1 className="t-display" style={{ marginTop: 24 }}>
               Evidence fixed before the money moves.
             </h1>
             <p className="t-body t-body-dim" style={{ marginTop: 30 }}>
-              x402 settlement is a push payment, irreversible once executed.
-              Notch holds the authorization instead of submitting it — and
-              settles against evidence both sides fixed before they had a
-              reason to lie.
+              x402 lets an autonomous agent pay for an API call in one shot —
+              and get garbage back with no recourse. Notch holds the
+              authorization instead of submitting it, and settles against
+              evidence both sides fixed before they had a reason to lie.
             </p>
             <div className="row" style={{ marginTop: 36, gap: 24 }}>
               <Link href="/console" className="pill">Open the console</Link>
@@ -62,9 +62,36 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── two actors ─────────────────────────────────────────────────── */}
+      <section className="wrap section">
+        <p className="t-label t-label-spark">Two hands on the system</p>
+        <div className="split" style={{ marginTop: 24, alignItems: "stretch" }}>
+          <div className="panel panel-lg">
+            <p className="t-label t-label-iris">The agent</p>
+            <h3 className="t-heading-xs" style={{ marginTop: 12 }}>Pays headlessly.</h3>
+            <p className="t-body t-body-dim" style={{ marginTop: 14, fontSize: 16 }}>
+              The buyer is an autonomous agent. It reads the 402, signs an
+              EIP-3009 authorization, and pays over x402 — no human in the
+              loop, no wallet popup. Machine-to-machine, exactly as the rail
+              intends.
+            </p>
+          </div>
+          <div className="panel panel-lg">
+            <p className="t-label t-label-iris">The human</p>
+            <h3 className="t-heading-xs" style={{ marginTop: 12 }}>Disputes by hand.</h3>
+            <p className="t-body t-body-dim" style={{ marginTop: 14, fontSize: 16 }}>
+              When a delivery is wrong, a person steps in: connect a wallet,
+              post a bond, and open a challenge inside its window. The one
+              human action in an otherwise headless flow — and the only one
+              that should be.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* ── the proof ──────────────────────────────────────────────────── */}
       <section id="proof" className="wrap section">
-        <div className="split-rev">
+        <div className="split-rev" style={{ alignItems: "start", rowGap: 48 }}>
           <div>
             <p className="t-label t-label-iris">Ruled by the panel, on-chain</p>
             <blockquote style={{ margin: "24px 0 0" }}>
@@ -80,14 +107,14 @@ export default function Home() {
               record.
             </p>
           </div>
-          <div style={{ alignSelf: "center" }}>
+          <div className="panel">
             <p className="t-label">Three arcs, one deployment</p>
-            <div style={{ marginTop: 24, display: "grid", gap: 30 }}>
+            <div style={{ marginTop: 16 }}>
               <ProofRow id={PROOF_OPTIMISTIC} state="RELEASABLE" line="Delivered honestly — released by rule." />
               <ProofRow id={PROOF_STRUCTURAL} state="REFUND_DUE" line="Receipted garbage — ruled, slashed, refunded." />
               <ProofRow id={PROOF_SEMANTIC} state="REFUND_DUE" line="Well-formed but off-topic — only judgment could catch it." />
             </div>
-            <p className="t-caption" style={{ marginTop: 30 }}>
+            <p className="t-caption" style={{ marginTop: 20, marginBottom: 0 }}>
               These pages read the contract live.
             </p>
           </div>
@@ -126,10 +153,12 @@ function MomentLine({ n, head, line }: { n: string; head: string; line: string }
 
 function ProofRow({ id, state, line }: { id: string; state: string; line: string }) {
   return (
-    <Link href={`/console/p/${id}`} style={{ textDecoration: "none", display: "block" }}>
-      <span className="t-mono-lg breakable">{id}</span>
-      <span className={`state st-${state}`} style={{ marginLeft: 16 }}>{state}</span>
-      <p className="t-caption" style={{ marginTop: 8, marginBottom: 0 }}>{line}</p>
+    <Link href={`/console/p/${id}`} className="proof-row">
+      <div className="row-b" style={{ gap: 12, alignItems: "baseline" }}>
+        <span className="t-mono breakable">{id}</span>
+        <span className={`state st-${state}`}>{state}</span>
+      </div>
+      <p className="t-caption" style={{ marginTop: 6, marginBottom: 0 }}>{line}</p>
     </Link>
   );
 }

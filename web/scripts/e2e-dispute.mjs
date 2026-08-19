@@ -36,7 +36,9 @@ const ENV_FILE = path.join(WEB, ".env.local");
 const BASE_URL = process.env.NOTCH_BASE_URL || "http://localhost:3600";
 const RPC = "https://studio.genlayer.com/api";
 const GEN = 10n ** 18n;
-const CHALLENGE_BOND = GEN / 10n;          // the 0.1 GEN floor governs here
+// A $2.50 payment is 2.5 GEN at the demo rate, so 10% = 0.25 GEN clears the
+// max(10%, 0.1 GEN) floor. 0.3 GEN posts it with headroom (excess returns).
+const CHALLENGE_BOND = (GEN * 3n) / 10n;
 
 // Which misdelivery to buy: "bad" (fails structurally — the easy case) or
 // "offtopic" (passes every structural check, fails only semantically — the

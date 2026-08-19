@@ -29,7 +29,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-CONTRACT = r'''# v0.1.2
+CONTRACT = r'''# v0.1.3
 # { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
 
 import json
@@ -60,6 +60,12 @@ MIN_BOND_ATTO = 10**18              # 1 GEN floor to register as a seller
 MIN_CHALLENGE_BOND_ATTO = 10**17    # 0.1 GEN floor on a challenge
 CHALLENGE_BOND_BPS = 1000           # or 10% of payment value, whichever larger
 SLASH_BPS = 5000                    # a false receipt costs 50% of the payment
+# Payments are quoted in USDC atomic (6 decimals); bonds and slashes are GEN
+# wei (18 decimals). Convert one to the other so a slash is denominated in
+# bond the seller actually feels, not token dust. Fixed 1 USDC = 1 GEN demo
+# rate; production swaps this for an oracle and the math below is unchanged.
+USDC_DECIMALS = 6
+GEN_WEI_PER_USDC = 10**18
 DISPUTE_TERMINAL_SECONDS = 604_800  # 7d: a stuck dispute has a permissionless exit
 RECEIPT_GRACE_SECONDS = 3600        # window start grace for the deadline path
 MAX_CRITERIA_CHARS = 1200           # matches the facilitator's schema
@@ -370,11 +376,16 @@ class Notch(gl.Contract):
             ids.append(payment_id)
             table[key] = json.dumps(ids)
 
+    def _amount_gen(self, amount_atto: int) -> int:
+        """A USDC-atomic payment value expressed in GEN wei, so exposure and
+        slash are denominated in the seller's own bond units, not token dust."""
+        return amount_atto * GEN_WEI_PER_USDC // (10 ** USDC_DECIMALS)
+
     def _reserve_for(self, amount_atto: int) -> int:
-        """What a payment holds against the seller's bond: the amount a false
+        """What a payment holds against the seller's bond: the GEN a false
         receipt would cost them. Reserving exactly the slashable portion is
         what makes the bond a real answer rather than a gesture (S23)."""
-        return amount_atto * SLASH_BPS // 10_000
+        return self._amount_gen(amount_atto) * SLASH_BPS // 10_000
 
     # ── seller lifecycle ─────────────────────────────────────────────────────
 
@@ -594,7 +605,7 @@ class Notch(gl.Contract):
         if now >= int(p.window_ends):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} the challenge window has closed")
 
-        need = max(int(p.amount_atto) * CHALLENGE_BOND_BPS // 10_000,
+        need = max(self._amount_gen(int(p.amount_atto)) * CHALLENGE_BOND_BPS // 10_000,
                    MIN_CHALLENGE_BOND_ATTO)
         bond = int(gl.message.value)
         if bond < need:

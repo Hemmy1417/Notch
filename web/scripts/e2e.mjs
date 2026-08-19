@@ -166,9 +166,11 @@ function cliWrite(method, args) {
 step(1, "the seller's identity costs something (bond on the court)");
 let sellerRec = await courtRead("get_seller", [seller.address]);
 if (!sellerRec) {
-  info("seller is not registered — bonding 1 GEN");
+  // 3 GEN: a $2.50 payment now reserves 1.25 GEN (1 USDC = 1 GEN demo rate),
+  // so the bond must exceed that with headroom for the dispute arcs.
+  info("seller is not registered — bonding 3 GEN");
   try {
-    await sellerWrite("register_seller", [], GEN);
+    await sellerWrite("register_seller", [], GEN * 3n);
   } catch (e) {
     if (/insufficient|balance|funds/i.test(String(e?.message))) {
       die(`the seller wallet has no GEN for its bond. Fund it, then rerun:\n` +
@@ -222,19 +224,39 @@ step(3, "a real x402-fetch client pays the 402");
       { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" },
     ]},
   });
-  const pub = createPublicClient({ chain: baseSepolia, transport: http("https://sepolia.base.org") });
-  const theirs = await pub.readContract({
-    address: served.asset,
-    abi: [{ name: "DOMAIN_SEPARATOR", type: "function", stateMutability: "view",
-            inputs: [], outputs: [{ type: "bytes32" }] }],
-    functionName: "DOMAIN_SEPARATOR",
-  });
-  if (ours.toLowerCase() !== theirs.toLowerCase()) {
+  // Base Sepolia public RPCs rate-limit hard; try a few before giving up. The
+  // proof is a guard, not the payment — the x402 client reads name/version
+  // from the quote's `extra` hints, so a throttled RPC must not block the run.
+  const RPCS = [
+    process.env.BASE_SEPOLIA_RPC_URL,
+    "https://base-sepolia-rpc.publicnode.com",
+    "https://sepolia.base.org",
+    "https://base-sepolia.gateway.tenderly.co",
+  ].filter(Boolean);
+  let theirs = null;
+  for (const url of RPCS) {
+    try {
+      const pub = createPublicClient({ chain: baseSepolia, transport: http(url) });
+      theirs = await pub.readContract({
+        address: served.asset,
+        abi: [{ name: "DOMAIN_SEPARATOR", type: "function", stateMutability: "view",
+                inputs: [], outputs: [{ type: "bytes32" }] }],
+        functionName: "DOMAIN_SEPARATOR",
+      });
+      break;
+    } catch { /* try the next endpoint */ }
+  }
+  if (theirs === null) {
+    info("⚠ every Base Sepolia RPC is throttled — skipping the on-chain domain " +
+         "proof (the token domain is unchanged and the client signs from the " +
+         "quote hints regardless)");
+  } else if (ours.toLowerCase() !== theirs.toLowerCase()) {
     die(`EIP-712 domain mismatch: our separator ${ours} vs the token's ${theirs}.
 ` +
         "  The name/version constants for this token are wrong — fix KNOWN_DOMAINS before anything can verify.");
+  } else {
+    ok("our EIP-712 domain matches the token's on-chain DOMAIN_SEPARATOR");
   }
-  ok("our EIP-712 domain matches the token's on-chain DOMAIN_SEPARATOR");
 }
 const signer = await createSigner("base-sepolia", keys.buyerPk);
 const paidFetch = wrapFetchWithPayment(fetch, signer, BigInt(3_000_000));

@@ -1,16 +1,28 @@
 # Notch — Deployment
 
-## Deployment record — StudioNet (2026-08-18)
+## Deployment record — StudioNet (2026-08-19)
 
 | | |
 |---|---|
-| Contract | `0x5d22edAE1e32f977b57b99B8d95D3A0097e5b517` |
-| Deploy tx | `0xf9ddf1490e8ad67f738ee4a31d804c6918334adfa5d9bb6be0255a399a67a3c7` |
-| Version | v0.1.2 |
-| Supersedes | `0x3b044403…fEfa` (v0.1.1 — payout-API fix below), `0x1E5e00ab…9f01` (v0.1.0 — Address-normalization fix) |
+| Contract | `0x612bBb4942DB87A1677FfFaD3a7DDb26d3f06e02` |
+| Deploy tx | `0x4433dca8c891328b333ec454766eea2d55d1adacc23355cb6092954d7e6ce309` |
+| Version | v0.1.3 |
+| Supersedes | `0x5d22edAE…b517` (v0.1.2 — pre unit-mapping), `0x3b044403…fEfa` (v0.1.1 — payout-API fix), `0x1E5e00ab…9f01` (v0.1.0 — Address fix) |
 | Deployer / operator | `0x10dbf82a8bb191bd1c082de5ef915e998aa5ccd7` |
 | Network | GenLayer StudioNet (chainId 61999), gasless |
 | Runner | pinned `py-genlayer:1jb45aa8…jpz09h6` |
+
+### v0.1.3 — the price mapping (economics made real)
+
+Payments are quoted in USDC atomic (6 decimals); bonds and slashes are GEN wei
+(18 decimals). Before v0.1.3 the reserve and slash used the USDC-atomic number
+directly, so a 50% slash of a $2.50 payment was 1,250,000 wei — dust. v0.1.3
+converts payment value to GEN at a fixed 1 USDC = 1 GEN demo rate (an oracle in
+production; the mechanism is rate-agnostic), so the same payment reserves
+**2.5 GEN** and a false receipt costs the seller **1.25 GEN** of real bond. A
+new mutation-sweep guard pins the conversion: reverting it makes a slash dust
+again and a test fails. Gate: 46 direct tests, **17/17 mutation guards**,
+generator byte-sync, deployed byte-match.
 
 ### v0.1.2 — the payout-API fix (live-fire bug #4)
 

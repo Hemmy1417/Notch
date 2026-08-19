@@ -333,6 +333,17 @@ details.fold > summary::before {
 }
 details.fold[open] > summary::before { transform: rotate(90deg); }
 
+/* proof rows inside the landing's record panel — hairline-separated links */
+.proof-row {
+  display: block; text-decoration: none;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--hairline-soft);
+  transition: opacity .14s ease;
+}
+.proof-row:first-child { padding-top: 4px; }
+.proof-row:last-child { border-bottom: 0; padding-bottom: 4px; }
+.proof-row:hover .t-mono { color: var(--iris-lit); }
+
 /* feature links on the overview — typographic, no cards */
 .feature-link { display: block; text-decoration: none; }
 .feature-link h3 { transition: color .14s ease; }

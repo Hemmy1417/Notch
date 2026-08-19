@@ -248,7 +248,13 @@ def sha(text):
 CRITERIA = ("Respond with valid JSON containing at least ten European capital "
             "cities, each with its country and population.")
 ASSET = "0x036cbd53842c5426634e7929541ec2318f3dcf7e"
-AMOUNT = str(GEN)  # 1 GEN-equivalent for easy math
+AMOUNT = "2500000"  # $2.50 in USDC atomic (6 decimals) — a realistic payment
+# At the contract's 1 USDC = 1 GEN demo rate this is 2.5 GEN of exposure, so a
+# 50% slash is 1.25 GEN — real bond, not the token dust the old wei-as-amount
+# fixtures produced.
+AMOUNT_GEN = 2500000 * GEN // 10**6  # 2.5 GEN, the value in bond units
+RESERVE = AMOUNT_GEN * 5000 // 10000  # 1.25 GEN reserved / slashable
+CHALLENGE_BOND = AMOUNT_GEN * 1000 // 10000  # 0.25 GEN — 10% of the payment, above the 0.1 floor
 WINDOW = 600
 
 

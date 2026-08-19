@@ -9,6 +9,7 @@ import pytest
 
 from .conftest import (
     OPERATOR, SELLER, BUYER, STRANGER, GEN, WINDOW, CRITERIA, ASSET,
+    RESERVE, CHALLENGE_BOND, AMOUNT_GEN,
     as_, advance, sent, sha, panel_says,
     registered_seller, registered_quote, recorded_payment, receipted,
 )
@@ -17,27 +18,27 @@ from .conftest import (
 # ── concurrent exposure against one bond ─────────────────────────────────────
 
 def test_concurrent_payments_reserve_additively_never_overlapping(module, c):
-    """A 5 GEN bond answers for at most ten 1-GEN payments at 50% slash. The
-    eleventh must be refused — and each settled payment must free exactly its
-    own reserve, never a neighbour's."""
+    """A 5 GEN bond answers for at most four 2.5-GEN payments at 50% slash (each
+    reserves 1.25 GEN). The fifth must be refused — and each settled payment
+    must free exactly its own reserve, never a neighbour's."""
     registered_seller(module, c)                   # 5 GEN bond
     qh = registered_quote(module, c)
 
-    for i in range(10):
+    for i in range(4):
         recorded_payment(module, c, qh, f"pay-{i}")
     s = json.loads(c.get_seller(SELLER))
-    assert s["reserved_atto"] == str(5 * GEN)      # fully committed
+    assert s["reserved_atto"] == str(5 * GEN)      # fully committed: 4 * 1.25 GEN
 
     as_(module, OPERATOR, 0)
     with pytest.raises(module.gl.vm.UserError, match="cannot answer"):
-        c.record_payment("pay-10", qh, BUYER)
+        c.record_payment("pay-4", qh, BUYER)
 
     # settle one; exactly one reserve frees; exactly one more fits
     receipted(module, c, "pay-0")
     advance(WINDOW + 1)
     as_(module, STRANGER, 0)
     c.finalize("pay-0")
-    assert json.loads(c.get_seller(SELLER))["reserved_atto"] == str(4 * GEN + GEN // 2)
+    assert json.loads(c.get_seller(SELLER))["reserved_atto"] == str(3 * RESERVE)
     recorded_payment(module, c, qh, "pay-10")
     as_(module, OPERATOR, 0)
     with pytest.raises(module.gl.vm.UserError, match="cannot answer"):
@@ -47,19 +48,19 @@ def test_concurrent_payments_reserve_additively_never_overlapping(module, c):
 def test_a_slash_shrinks_future_capacity_not_just_the_number(module, c):
     """After a NOT_AS_DESCRIBED ruling the bond is smaller, and the smaller
     bond must answer for correspondingly fewer concurrent payments."""
-    registered_seller(module, c, bond=GEN)         # 1 GEN: capacity for 2
+    registered_seller(module, c, bond=2 * RESERVE)  # 2.5 GEN: capacity for 2
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh, "pay-a")
     receipted(module, c, pid)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid, "not as promised")
     panel_says("NOT_AS_DESCRIBED")
     as_(module, STRANGER, 0)
     c.adjudicate(pid, "the delivered body")
 
     s = json.loads(c.get_seller(SELLER))
-    assert s["bond_atto"] == str(GEN // 2)         # slashed by half the payment
-    recorded_payment(module, c, qh, "pay-b")       # one still fits (0.5 needs 0.5)
+    assert s["bond_atto"] == str(RESERVE)         # slashed by one RESERVE (2.5 - 1.25)
+    recorded_payment(module, c, qh, "pay-b")       # one still fits (1.25 needs 1.25)
     as_(module, OPERATOR, 0)
     with pytest.raises(module.gl.vm.UserError, match="cannot answer"):
         c.record_payment("pay-c", qh, BUYER)       # the second no longer does
@@ -144,9 +145,9 @@ def test_wei_conservation_across_every_dispute_path(module, c):
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh, "arc-1")
     receipted(module, c, pid)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid, "claim")                      # +0.1 bond
-    paid_in += GEN // 10
+    paid_in += CHALLENGE_BOND
     panel_says("AS_DESCRIBED")
     as_(module, STRANGER, 0)
     c.adjudicate(pid, "the delivered body")
@@ -154,9 +155,9 @@ def test_wei_conservation_across_every_dispute_path(module, c):
     # arc 2: NOT_AS_DESCRIBED on a fresh payment
     pid2 = recorded_payment(module, c, qh, "arc-2")
     receipted(module, c, pid2)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid2, "claim")
-    paid_in += GEN // 10
+    paid_in += CHALLENGE_BOND
     panel_says("NOT_AS_DESCRIBED")
     as_(module, STRANGER, 0)
     c.adjudicate(pid2, "the delivered body")
@@ -164,9 +165,9 @@ def test_wei_conservation_across_every_dispute_path(module, c):
     # arc 3: INCONCLUSIVE
     pid3 = recorded_payment(module, c, qh, "arc-3")
     receipted(module, c, pid3)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid3, "claim")
-    paid_in += GEN // 10
+    paid_in += CHALLENGE_BOND
     panel_says("INCONCLUSIVE")
     as_(module, STRANGER, 0)
     c.adjudicate(pid3, "the delivered body")
@@ -174,7 +175,7 @@ def test_wei_conservation_across_every_dispute_path(module, c):
     paid_out = sum(amount for _, amount in sent())
     assert _pot(c) == paid_in - paid_out
     # and the pot is exactly the surviving bond: 5 GEN minus the one slash
-    assert _pot(c) == 5 * GEN - GEN // 2
+    assert _pot(c) == 5 * GEN - RESERVE
 
 
 def test_the_stale_dispute_exit_conserves_too(module, c):
@@ -182,13 +183,13 @@ def test_the_stale_dispute_exit_conserves_too(module, c):
     qh = registered_quote(module, c)
     pid = recorded_payment(module, c, qh)
     receipted(module, c, pid)
-    as_(module, BUYER, GEN // 10)
+    as_(module, BUYER, CHALLENGE_BOND)
     c.challenge(pid, "claim")
     advance(604_800 + 1)
     as_(module, STRANGER, 0)
     c.finalize(pid)
     paid_out = sum(a for _, a in sent())
-    assert paid_out == GEN // 10                   # exactly the bond, nothing else
+    assert paid_out == CHALLENGE_BOND                   # exactly the bond, nothing else
     assert _pot(c) == 5 * GEN                      # exactly the seller bond
 
 

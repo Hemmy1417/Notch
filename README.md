@@ -47,9 +47,9 @@ Notch changes the order of events rather than the quality of the arguing:
 
 | | |
 |---|---|
-| Court contract | `0x5d22edAE1e32f977b57b99B8d95D3A0097e5b517` (GenLayer StudioNet, chainId 61999) |
-| Deploy tx | `0xf9ddf1490e8ad67f738ee4a31d804c6918334adfa5d9bb6be0255a399a67a3c7` |
-| Contract version | v0.1.2 — deployed code byte-matches [`contracts/notch.py`](contracts/notch.py) |
+| Court contract | `0x612bBb4942DB87A1677FfFaD3a7DDb26d3f06e02` (GenLayer StudioNet, chainId 61999) |
+| Deploy tx | `0x4433dca8c891328b333ec454766eea2d55d1adacc23355cb6092954d7e6ce309` |
+| Contract version | v0.1.3 — deployed code byte-matches [`contracts/notch.py`](contracts/notch.py) |
 | Runner | pinned `py-genlayer:1jb45aa8…jpz09h6` |
 | Payment rail | Base Sepolia USDC (`0x036CbD53842c5426634e7929541eC2318f3dCF7e`), x402 v1 wire format |
 | Web console | Vercel deploy pending — runs locally via `npm run dev` in `web/` |
@@ -103,9 +103,9 @@ are real; the web console resolves each to its full on-chain record.
 ### 1. The optimistic arc — honest delivery, automatic release
 
 ```text
-payment          pay_98b926f3ae2f1589
+payment          pay_f19709fc2ada6624
 quote hash       38b9c8497f…9dd0a1  (served == registered == paid-against)
-receipt signer   0x897282d3…511A2C  == bonded seller
+receipt signer   0x897282d3…511A2C  == bonded seller (3 GEN bond, 2.5 GEN reserved)
 court state      RELEASABLE
 rail             DRY RUN — settlement key unfunded, reported honestly
 ```
@@ -120,7 +120,7 @@ The seller delivered `{"summary": "Sorry, I can't help with that request.",
 and two cited sources — and signed the receipt for it.
 
 ```text
-payment        pay_843a12d658f2a3cf
+payment        pay_7e701d83f96c545f
 verdict        NOT_AS_DESCRIBED
 reasoning      "The acceptance criteria require a summary of at least 200
                 characters addressing the topic and a sources array with at
@@ -128,7 +128,7 @@ reasoning      "The acceptance criteria require a summary of at least 200
                 delivered JSON contains an apologetic short summary and an
                 empty sources array, violating both requirements."
 court state    REFUND_DUE -> hold REFUNDED (authorization never submitted)
-the slash      1,250,000 atto — exactly 50% of the payment, verified on-chain
+the slash      1.25 GEN — 50% of the 2.5-GEN payment value, verified on-chain
 conservation   pot == remaining bond to the atto after bond+slash left to buyer
 ```
 
@@ -141,20 +141,22 @@ criteria pin the topic to x402 settlement mechanics. **No schema validator,
 regex, or deterministic contract can catch this one.**
 
 ```text
-payment        pay_5047729e03d30dcd
+payment        pay_7e69d93ff9df7a47
 delivered      "Sourdough fermentation depends on a stable starter culture…"
                (380 chars, fluent, two sources with url+claim — structurally valid)
 verdict        NOT_AS_DESCRIBED
-reasoning      "The delivered content's 'summary' addresses sourdough baking,
-                not the x402 payment protocol or machine-to-machine payment
-                mechanics as required by the criteria. The form is correct,
-                but the topic is entirely unrelated to the specified subject."
+reasoning      "The delivered content does not address the x402 payment protocol
+                or the settlement and dispute mechanics of machine-to-machine
+                payments as required… Instead it discusses sourdough baking,
+                which is unrelated to the specified topic."
 court state    REFUND_DUE -> hold REFUNDED (authorization never submitted)
-seller record  2 broken receipts, slashed again — the record follows the key
+the slash      1.25 GEN — 50% of the 2.5-GEN payment value, real bond, on-chain
+seller record  1 broken receipt; the record follows the key, not the delivery
 ```
 
-The panel said it itself: *the form is correct.* Every deterministic check
-passes. The ruling exists only because validators read the words.
+The panel said it itself: *the topic is unrelated.* Every deterministic check
+passes. The ruling exists only because validators read the words — and the
+false receipt cost the seller 1.25 GEN of real bond, not dust.
 
 ## Why GenLayer, plainly
 
@@ -193,7 +195,7 @@ The panel is deliberately caged:
 | Gate | Result |
 |---|---|
 | Direct contract tests | 46 passing — bonds, quotes, receipts, all three verdicts, conservation across every dispute path, concurrency invariants |
-| Mutation sweep | **16/16 money-path guards pinned** — every guard has a test that fails when the guard is deleted; accept-control included |
+| Mutation sweep | **17/17 money-path guards pinned** — every guard has a test that fails when the guard is deleted; accept-control included |
 | Web tests | 49 passing — facilitator verify/settle, EIP-3009 recovery, TS/Python quote-hash parity vectors, x402 v1 conformance |
 | genvm-lint | clean (one advisory: the intentional LLM-error resampling exception) |
 | Deployed byte-match | `genlayer code` output matches the repo source, whitespace-normalized |
@@ -263,11 +265,11 @@ mid-write.
   USDC submission on Base Sepolia is reported as a dry run rather than
   executed. The reconciler prints what it would submit; it never invents a
   transaction hash.
-- **Units are conflated.** Quote amounts are USDC-atomic while bonds are
-  GEN-denominated, so a $2.50 payment produces a microscopic slash in GEN
-  terms. The mechanism moved the exact numbers the rules dictate — verified
-  to the atto — but production needs a rate mapping or GEN-denominated
-  pricing.
+- **The price rate is fixed, not oracle-fed.** Payments are USDC-atomic and
+  bonds are GEN-wei; the contract converts between them at a fixed 1 USDC = 1
+  GEN rate, so a $2.50 payment reserves 2.5 GEN and a 50% slash costs the
+  seller 1.25 GEN — real bond, not dust. Production replaces the fixed rate
+  with a price oracle; the reserve/slash mechanism is already rate-agnostic.
 - **The window is seller risk.** A buyer can drain their wallet during the
   challenge window, making a released authorization unsubmittable. This is
   stated x402 facilitator reality, and it argues for short windows.

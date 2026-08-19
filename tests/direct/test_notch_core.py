@@ -9,6 +9,7 @@ import pytest
 
 from .conftest import (
     OPERATOR, SELLER, BUYER, STRANGER, GEN, CRITERIA, ASSET, AMOUNT, WINDOW,
+    RESERVE, CHALLENGE_BOND,
     as_, advance, sent, sha, panel_says,
     registered_seller, registered_quote, recorded_payment, receipted,
 )
@@ -39,15 +40,15 @@ def test_bond_topup_deepens_rather_than_duplicates(module, c):
 
 
 def test_withdraw_returns_only_the_unreserved_portion(module, c):
-    registered_seller(module, c)
+    registered_seller(module, c)             # 5 GEN bond
     qh = registered_quote(module, c)
-    recorded_payment(module, c, qh)          # reserves 50% of 1 GEN
+    recorded_payment(module, c, qh)          # reserves one RESERVE (1.25 GEN)
     as_(module, SELLER, 0)
     with pytest.raises(module.gl.vm.UserError, match="standing behind"):
         c.withdraw_bond(str(5 * GEN))        # all of it — refused
-    c.withdraw_bond(str(4 * GEN))            # the free 4.5 has room for 4
-    assert json.loads(c.get_seller(SELLER))["bond_atto"] == str(1 * GEN)
-    assert sent()[-1] == (SELLER, 4 * GEN)
+    c.withdraw_bond(str(3 * GEN))            # free is 5 - 1.25 = 3.75, so 3 fits
+    assert json.loads(c.get_seller(SELLER))["bond_atto"] == str(2 * GEN)
+    assert sent()[-1] == (SELLER, 3 * GEN)
 
 
 # ── quotes: terms before money ───────────────────────────────────────────────
@@ -122,14 +123,14 @@ def test_recording_reserves_the_slashable_exposure(module, c):
     qh = registered_quote(module, c)
     recorded_payment(module, c, qh)
     s = json.loads(c.get_seller(SELLER))
-    assert s["reserved_atto"] == str(GEN // 2)   # SLASH_BPS = 50%
+    assert s["reserved_atto"] == str(RESERVE)   # SLASH_BPS = 50%
 
 
 def test_a_bond_that_cannot_answer_refuses_the_payment(module, c):
-    registered_seller(module, c, bond=GEN)       # 1 GEN bond
+    registered_seller(module, c, bond=2 * RESERVE)  # exactly two payments' worth
     qh = registered_quote(module, c)
-    recorded_payment(module, c, qh, "pay-1")     # reserves 0.5
-    recorded_payment(module, c, qh, "pay-2")     # reserves the other 0.5
+    recorded_payment(module, c, qh, "pay-1")     # reserves one RESERVE
+    recorded_payment(module, c, qh, "pay-2")     # reserves the other
     as_(module, OPERATOR, 0)
     with pytest.raises(module.gl.vm.UserError, match="cannot answer"):
         c.record_payment("pay-3", qh, BUYER)     # nothing left to reserve
