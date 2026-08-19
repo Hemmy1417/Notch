@@ -124,26 +124,26 @@ export default async function PaymentRecord({ params }: Params) {
 
       {/* the ruling first when there is one — it is the product */}
       {p.ruling && d ? (
-        <section className="section" style={{ paddingTop: 72 }}>
-          <div className="split-rev">
-            <div>
+        <section className="section" style={{ paddingTop: 56 }}>
+          <div className="split" style={{ alignItems: "stretch" }}>
+            <div className="panel panel-lg">
               <p className="t-label t-label-spark">The ruling</p>
               <p className={`state st-${p.state}`} style={{ marginTop: 16, fontSize: 15 }}>
                 {p.ruling.verdict}
               </p>
-              <blockquote style={{ margin: "18px 0 0" }}>
-                <p className="ruling-quote" style={{ fontSize: "clamp(20px, 2.2vw, 27px)" }}>
+              <blockquote style={{ margin: "20px 0 0" }}>
+                <p className="ruling-quote" style={{ maxWidth: "38ch" }}>
                   &ldquo;{p.ruling.reason}&rdquo;
                 </p>
               </blockquote>
-              <p className="t-caption" style={{ marginTop: 18 }} title={isoUtc(p.ruling.ruled_at)}>
+              <p className="t-caption" style={{ marginTop: 22 }} title={isoUtc(p.ruling.ruled_at)}>
                 Ruled {ago(p.ruling.ruled_at)} by validator consensus.
                 Confidence is advisory — only the verdict moves money.
               </p>
             </div>
-            <div style={{ alignSelf: "center" }}>
+            <div className="panel">
               <p className="t-label t-label-iris">The challenge</p>
-              <p className="t-body t-body-dim" style={{ marginTop: 14, fontSize: 16 }}>
+              <p className="t-body t-body-dim" style={{ marginTop: 14, fontSize: 15 }}>
                 {d.claim}
               </p>
               <dl className="facts" style={{ marginTop: 24 }}>
@@ -156,21 +156,23 @@ export default async function PaymentRecord({ params }: Params) {
           </div>
         </section>
       ) : d ? (
-        <section className="section" style={{ paddingTop: 72 }}>
-          <p className="t-label t-label-iris">The challenge — awaiting adjudication</p>
-          <p className="t-body t-body-dim" style={{ marginTop: 14, maxWidth: "52ch" }}>
-            {d.claim}
-          </p>
-          <p className="t-caption" style={{ marginTop: 16, maxWidth: "52ch" }}>
-            Anyone may submit the delivered bytes for judgment — the contract
-            verifies them against the seller&rsquo;s digest before any panel
-            is consulted.
-          </p>
+        <section className="section" style={{ paddingTop: 56 }}>
+          <div className="panel" style={{ maxWidth: 760 }}>
+            <p className="t-label t-label-iris">The challenge — awaiting adjudication</p>
+            <p className="t-body t-body-dim" style={{ marginTop: 14 }}>
+              {d.claim}
+            </p>
+            <p className="t-caption" style={{ marginTop: 16 }}>
+              Anyone may submit the delivered bytes for judgment — the contract
+              verifies them against the seller&rsquo;s digest before any panel
+              is consulted.
+            </p>
+          </div>
         </section>
       ) : null}
 
       {/* the record: compact facts */}
-      <section className="section" style={{ paddingTop: 72 }}>
+      <section className="section" style={{ paddingTop: 56 }}>
         <div className="split">
           <div className="panel">
             <p className="t-label">Parties &amp; terms</p>
@@ -213,7 +215,7 @@ export default async function PaymentRecord({ params }: Params) {
 
       {/* the terms, behind a fold */}
       {q ? (
-        <section className="section" style={{ paddingTop: 60 }}>
+        <section className="section" style={{ paddingTop: 48 }}>
           <details className="fold">
             <summary>What counted as delivery — the terms, verbatim</summary>
             <p className="prose-block" style={{ marginTop: 24 }}>{q.criteria}</p>
@@ -225,7 +227,7 @@ export default async function PaymentRecord({ params }: Params) {
         </section>
       ) : null}
 
-      <p className="section section-tail" style={{ paddingTop: 60 }}>
+      <p className="section section-tail" style={{ paddingTop: 44 }}>
         <Link href="/console/payments" className="ghost ghost-lit">← All payments</Link>
       </p>
     </Shell>
