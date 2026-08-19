@@ -172,7 +172,7 @@ export default async function PaymentRecord({ params }: Params) {
       {/* the record: compact facts */}
       <section className="section" style={{ paddingTop: 72 }}>
         <div className="split">
-          <div>
+          <div className="panel">
             <p className="t-label">Parties &amp; terms</p>
             <dl className="facts" style={{ marginTop: 18 }}>
               <dt className="t-label">Seller</dt>
@@ -192,7 +192,7 @@ export default async function PaymentRecord({ params }: Params) {
             </dl>
           </div>
           {p.receipt ? (
-            <div>
+            <div className="panel">
               <p className="t-label">The seller&rsquo;s receipt</p>
               <dl className="facts" style={{ marginTop: 18 }}>
                 <dt className="t-label">Body digest</dt>

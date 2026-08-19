@@ -11,10 +11,13 @@
    amber (#ffb829, spark) marks emphasis — the labels above things worth
    reading. Everything else is white and two grays.
 
-   Hierarchy comes from SCALE, never weight: headlines are weight 400 at
-   massive sizes with hard negative tracking; body copy is weight 200 —
-   airy, non-aggressive. The one exception is machine text (ids, digests,
-   amounts), which is monospaced because a hash is not prose.
+   Hierarchy comes from SCALE first: headlines are weight 400 at massive
+   sizes. Body copy is weight 400 too — readability leads, because thin text
+   on black blooms and a ruling has to be read, not squinted at. Grouping is
+   done with the faintest surfaces and hairlines, not loud cards: enough to
+   organize the eye, never enough to break the floating-in-space feel. The
+   one machine exception is monospaced text (ids, digests, amounts), because
+   a hash is not prose.
 
    The signature gesture is the split tally: a constellation of tiny outlined
    triangles forming two halves of a notched stick whose cuts match — both
@@ -22,28 +25,39 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* colors */
+  /* colors — grays lifted for legibility on black (ash ~7.5:1, silver ~10:1) */
   --void:        #000000;
   --bone:        #ffffff;
-  --ash:         #9a9a9a;
-  --silver:      #bdbdbd;
+  --ash:         #b4b4b4;
+  --silver:      #d2d2d2;
   --iris:        #8052ff;
-  --iris-lit:    #9a73ff;
-  --spark:       #ffb829;
+  --iris-lit:    #a68cff;
+  --spark:       #ffc247;
   --verdant:     #15846e;
+
+  /* faint structure — surfaces and hairlines that organize without boxing */
+  --surface:     rgba(255, 255, 255, 0.026);
+  --surface-2:   rgba(255, 255, 255, 0.05);
+  --hairline:    rgba(255, 255, 255, 0.10);
+  --hairline-soft: rgba(255, 255, 255, 0.06);
 
   /* payment states, inside the palette: spark = held open, iris = argued,
      verdant = resolved for the seller, silver = resolved for the buyer */
   --st-open:     var(--spark);
   --st-argued:   var(--iris-lit);
-  --st-release:  #2fae91;
+  --st-release:  #33c0a0;
   --st-refund:   var(--silver);
 
   --f-ui:   var(--font-inter), ui-sans-serif, system-ui, "Segoe UI", sans-serif;
   --f-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
 
+  /* spacing rhythm — an 8px grid the sections keep to */
+  --s-2: 8px;  --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
+  --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px; --s-20: 80px;
+
   --r-pill: 24px;
-  --page: 1280px;
+  --r-panel: 18px;
+  --page: 1200px;
 }
 
 * { box-sizing: border-box; }
@@ -72,18 +86,18 @@ body {
 
 .t-display {
   font-weight: 400;
-  font-size: clamp(44px, 7.4vw, 96px);
-  line-height: 1.04;
-  letter-spacing: -0.04em;
+  font-size: clamp(44px, 7.4vw, 92px);
+  line-height: 1.06;
+  letter-spacing: -0.032em;
   text-wrap: balance;
   color: var(--bone);
   margin: 0;
 }
 .t-heading-lg {
   font-weight: 400;
-  font-size: clamp(34px, 4.8vw, 62px);
-  line-height: 1.08;
-  letter-spacing: -0.04em;
+  font-size: clamp(33px, 4.6vw, 58px);
+  line-height: 1.1;
+  letter-spacing: -0.028em;
   text-wrap: balance;
   color: var(--bone);
   margin: 0;
@@ -106,28 +120,29 @@ body {
   margin: 0;
 }
 
-/* Body is weight 200 — the signature. Never 400. */
+/* Body is weight 400 — readable first. Airiness comes from line-height. */
 .t-body {
-  font-weight: 200;
-  font-size: 18px;
-  line-height: 1.55;
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.65;
   color: var(--bone);
-  max-width: 52ch;
+  max-width: 60ch;
 }
 .t-body-dim { color: var(--silver); }
 .t-caption {
-  font-weight: 200;
+  font-weight: 400;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--ash);
+  max-width: 60ch;
 }
 
 /* Labels: the only semibold, always uppercase, usually spark. */
 .t-label {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.2;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.13em;
   text-transform: uppercase;
   color: var(--ash);
 }
@@ -144,10 +159,10 @@ body {
 }
 .t-mono-lg { font-family: var(--f-mono); font-size: 16px; font-variant-numeric: tabular-nums; color: var(--bone); }
 
-/* Big numerals for the stats band — scale, not weight. */
+/* Big numerals for the stats band — scale, with a touch more presence. */
 .t-figure {
-  font-weight: 200;
-  font-size: clamp(40px, 4.6vw, 64px);
+  font-weight: 340;
+  font-size: clamp(40px, 4.6vw, 60px);
   line-height: 1;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
@@ -205,8 +220,26 @@ body {
 .breakable { overflow-wrap: anywhere; }
 .scroll-x { overflow-x: auto; }
 
-.section { padding: 96px 0 0; }
-.section-tail { padding-bottom: 120px; }
+.section { padding: 80px 0 0; }
+.section-tail { padding-bottom: 96px; }
+@media (max-width: 640px) {
+  .section { padding: 56px 0 0; }
+  .section-tail { padding-bottom: 64px; }
+}
+
+/* ── faint structure: panels and dividers that organize, never box ──────── */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  padding: 28px 32px;
+}
+.panel-lg { padding: 36px 40px; }
+@media (max-width: 640px) {
+  .panel { padding: 22px 20px; }
+  .panel-lg { padding: 26px 22px; }
+}
+.divider { height: 1px; background: var(--hairline-soft); border: 0; margin: 0; }
 
 /* two-column rhythm; stacks on small screens */
 .split {
@@ -232,17 +265,22 @@ body {
   .facts dd { margin-bottom: 12px; }
 }
 
-/* the book: payment rows, whitespace-separated */
+/* the book: payment rows as interactive list items, hairline-separated */
 .book-row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr) minmax(100px, auto);
   gap: 18px; align-items: baseline;
-  padding: 18px 0;
+  padding: 18px 20px;
+  margin: 0 -20px;
+  border-radius: 12px;
   text-decoration: none;
+  border-bottom: 1px solid var(--hairline-soft);
+  transition: background .14s ease;
 }
+.book-row:hover { background: var(--surface-2); }
 .book-row:hover .t-mono-lg { color: var(--iris-lit); }
 @media (max-width: 640px) {
-  .book-row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 14px 0; }
+  .book-row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 14px 16px; margin: 0 -16px; }
 }
 
 /* ── console chrome: sub-nav, breadcrumbs, hash chips, disclosure ────────── */
@@ -300,8 +338,15 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 .feature-link h3 { transition: color .14s ease; }
 .feature-link:hover h3 { color: var(--iris-lit); }
 
-/* ── challenge panel: the one human action, still no card ────────────────── */
-.challenge-box { max-width: 640px; }
+/* ── challenge panel: the one human action, in a faint panel ─────────────── */
+.challenge-box {
+  max-width: 640px; margin-top: 20px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-panel);
+  padding: 28px 32px;
+}
+@media (max-width: 640px) { .challenge-box { padding: 22px 20px; } }
 .wallet-opt {
   display: inline-flex; align-items: center; gap: 10px;
   background: none; border: 0; padding: 8px 0; margin-right: 28px;
@@ -329,21 +374,21 @@ details.fold[open] > summary::before { transform: rotate(90deg); }
 
 /* the ruling, quoted large — the panel's words are the product */
 .ruling-quote {
-  font-weight: 200;
-  font-size: clamp(21px, 2.6vw, 32px);
-  line-height: 1.35;
-  letter-spacing: -0.01em;
+  font-weight: 340;
+  font-size: clamp(21px, 2.5vw, 30px);
+  line-height: 1.4;
+  letter-spacing: -0.015em;
   color: var(--bone);
-  max-width: 30ch;
+  max-width: 34ch;
   margin: 0;
 }
 
 /* criteria and claims are read, not scanned */
 .prose-block {
-  font-weight: 200;
-  font-size: 17px;
-  line-height: 1.6;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.7;
   color: var(--silver);
-  max-width: 62ch;
+  max-width: 64ch;
   white-space: pre-wrap;
 }
