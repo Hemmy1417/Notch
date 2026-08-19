@@ -43,6 +43,12 @@ Notch changes the order of events rather than the quality of the arguing:
    alone swung platform win rates from 86% to 95%. Multi-validator consensus
    is the answer this build stakes itself on.
 
+Two hands touch the system, and only two. The **buyer is an autonomous
+agent** — it reads the 402, signs an EIP-3009 authorization, and pays over
+x402 with no human in the loop. The **one human action** is the dispute: when
+a delivery is wrong, a person connects a wallet, posts a bond, and files a
+challenge inside its window. Everything else is machine-to-machine.
+
 ## Live deployment
 
 | | |
@@ -98,7 +104,10 @@ the clock returns rather than becoming instantly refundable.
 
 Everything below ran against the deployed contract under real StudioNet
 validators, driven by an **unmodified `x402-fetch` client**. The payment ids
-are real; the web console resolves each to its full on-chain record.
+are real; the web console resolves each to its full on-chain record. A fourth,
+adversarial arc — prompt injection hidden inside the seller-signed delivery —
+is the flagship of [`docs/STRESS_TEST.md`](docs/STRESS_TEST.md); the panel
+named the embedded override attempt and ruled against it anyway.
 
 ### 1. The optimistic arc — honest delivery, automatic release
 
@@ -227,6 +236,7 @@ npm run dev                     # landing, protocol, console on :3000
 node scripts/e2e.mjs                    # optimistic: pay → hold → receipt → window → release
 node scripts/e2e-dispute.mjs bad        # structural dispute
 node scripts/e2e-dispute.mjs offtopic   # semantic dispute
+node scripts/e2e-dispute.mjs inject     # semantic dispute under prompt injection
 ```
 
 ```bash
