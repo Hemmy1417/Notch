@@ -9,15 +9,15 @@
 
 export const CHAIN = {
   /** x402 v1 uses named networks, not CAIP-2 ids. */
-  network: process.env.NEXT_PUBLIC_X402_NETWORK ?? "base-sepolia",
+  network: (process.env.NEXT_PUBLIC_X402_NETWORK ?? "base-sepolia").trim(),
   /**
    * USDC. Base Sepolia and Base mainnet both use 6 decimals.
    * Sepolia: 0x036CbD53842c5426634e7929541eC2318f3dCF7e
    * Mainnet: 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
    */
   asset:
-    process.env.NEXT_PUBLIC_X402_ASSET ??
-    "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    (process.env.NEXT_PUBLIC_X402_ASSET ??
+    "0x036CbD53842c5426634e7929541eC2318f3dCF7e").trim(),
   assetDecimals: 6,
 } as const;
 

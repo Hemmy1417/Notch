@@ -31,9 +31,11 @@ address the requested topic does not satisfy this criterion. An empty \
 summary, a summary consisting of an apology or a refusal, or fewer than two \
 sources, does not satisfy it either.`;
 
-/** The seller's bonded wallet. In production this comes from the registry. */
+/** The seller's bonded wallet. In production this comes from the registry.
+ *  Trimmed defensively: an env value pasted into a dashboard arrives with
+ *  stray whitespace often enough that refusing to trim is just self-harm. */
 const SELLER =
-  process.env.NOTCH_DEMO_SELLER ?? "0x0000000000000000000000000000000000000001";
+  (process.env.NOTCH_DEMO_SELLER ?? "0x0000000000000000000000000000000000000001").trim();
 
 function resourceUrl(req: NextRequest): string {
   const url = new URL(req.url);
@@ -43,17 +45,34 @@ function resourceUrl(req: NextRequest): string {
 export async function GET(req: NextRequest) {
   const resource = resourceUrl(req);
 
-  const quote = buildProtectedQuote({
-    resource,
-    description: "A researched summary with cited sources.",
-    network: CHAIN.network,
-    asset: CHAIN.asset,
-    maxAmountRequired: PRICE_ATOMIC,
-    payTo: SELLER,
-    seller: SELLER,
-    criteria: CRITERIA,
-    windowSeconds: DEFAULT_WINDOW_SECONDS,
-  });
+  // A quote that cannot be built is a MISCONFIGURATION, and it must say so —
+  // a bodyless 500 tells the operator nothing and a judge less.
+  let quote: ReturnType<typeof buildProtectedQuote>;
+  try {
+    quote = buildProtectedQuote({
+      resource,
+      description: "A researched summary with cited sources.",
+      network: CHAIN.network,
+      asset: CHAIN.asset,
+      maxAmountRequired: PRICE_ATOMIC,
+      payTo: SELLER,
+      seller: SELLER,
+      criteria: CRITERIA,
+      windowSeconds: DEFAULT_WINDOW_SECONDS,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: "quote_misconfigured",
+        detail:
+          "This endpoint could not build its payment quote. Check the " +
+          "NOTCH_DEMO_SELLER / NEXT_PUBLIC_X402_* environment values " +
+          "(a pasted value with stray whitespace or quotes is the usual " +
+          "culprit). " + (e instanceof Error ? e.message.slice(0, 160) : ""),
+      },
+      { status: 500, headers: { "cache-control": "no-store" } },
+    );
+  }
 
   // x402 v1 carries the client's payment in X-PAYMENT.
   const payment = req.headers.get("x-payment");
@@ -69,7 +88,7 @@ export async function GET(req: NextRequest) {
   }
 
   // ── a payment arrived: verify + hold, deliver, and SIGN for it ─────────
-  const sellerPk = process.env.NOTCH_DEMO_SELLER_PRIVATE_KEY;
+  const sellerPk = process.env.NOTCH_DEMO_SELLER_PRIVATE_KEY?.trim();
   if (!sellerPk || !/^0x[0-9a-fA-F]{64}$/.test(sellerPk)) {
     return NextResponse.json(
       {

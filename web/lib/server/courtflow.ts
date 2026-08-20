@@ -20,8 +20,8 @@ import type { Hex } from "viem";
 import { holdStore, type StoredHold } from "./holds";
 import { getPayment, recordPayment, COURT_CONFIGURED, type CourtPayment } from "./court";
 
-const RPC = process.env.GENLAYER_RPC_URL || "https://studio.genlayer.com/api";
-const CONTRACT = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "") as `0x${string}`;
+const RPC = (process.env.GENLAYER_RPC_URL || "https://studio.genlayer.com/api").trim();
+const CONTRACT = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "").trim() as `0x${string}`;
 
 export type FlowStep =
   | { step: string; mode: "CONFIRMED" | "SUBMITTED" | "SKIPPED" | "WAITING" }
@@ -58,7 +58,7 @@ async function sellerSubmitReceipt(
   paymentId: string,
   r: { bodySha256: string; excerptSha256: string; excerptLen: number },
 ): Promise<FlowStep> {
-  const pk = process.env.NOTCH_DEMO_SELLER_PRIVATE_KEY;
+  const pk = process.env.NOTCH_DEMO_SELLER_PRIVATE_KEY?.trim();
   if (!pk || !/^0x[0-9a-fA-F]{64}$/.test(pk)) {
     return {
       step: "submit_receipt", mode: "DRY_RUN",

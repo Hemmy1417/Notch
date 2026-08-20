@@ -26,7 +26,7 @@ import { baseSepolia } from "viem/chains";
 import { parseSignature } from "viem";
 import type { StoredHold } from "./holds";
 
-const RPC = process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org";
+const RPC = (process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org").trim();
 
 /** FiatTokenV2 transferWithAuthorization (v,r,s form — universally present). */
 const EIP3009_ABI = [{
@@ -53,7 +53,7 @@ export type ReleaseResult =
   | { mode: "FAILED"; error: string };
 
 export async function release(hold: StoredHold): Promise<ReleaseResult> {
-  const pk = process.env.SETTLEMENT_PRIVATE_KEY;
+  const pk = process.env.SETTLEMENT_PRIVATE_KEY?.trim();
   if (!pk || !/^0x[0-9a-fA-F]{64}$/.test(pk)) {
     return {
       mode: "DRY_RUN",
