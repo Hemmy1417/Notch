@@ -275,6 +275,17 @@ mid-write.
 
 ## Honest limitations
 
+- **The hold store is dev-grade, and serverless shows it.** Holds live in a
+  JSON file (an OS-temp fallback on read-only hosts). On the deployed site
+  that file is per-instance and ephemeral: a live run proved the facilitator
+  records payments on the court service-side, but a reconcile answered by a
+  different instance could not see the hold. The failure is the SAFE
+  direction by construction — a lost hold means the authorization is never
+  submitted and simply expires: the buyer's money never moves; the seller
+  goes unpaid for that payment. The production fix is the durable store
+  adapter behind the same narrow interface (`lib/server/holds.ts` documents
+  the slot); until it exists, full hold durability is a local-deployment
+  property.
 - **The rail dry-runs.** `SETTLEMENT_PRIVATE_KEY` is unfunded, so the final
   USDC submission on Base Sepolia is reported as a dry run rather than
   executed. The reconciler prints what it would submit; it never invents a
