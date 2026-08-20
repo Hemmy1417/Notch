@@ -72,9 +72,11 @@ challenge inside its window. Everything else is machine-to-machine.
                                       |
                                     HELD          <- the authorization, not the money
                                       |
-                     operator records on court -> AWAITING_RECEIPT
+              the SERVICE records on court -> AWAITING_RECEIPT
+              (facilitator = operator; automatic after every hold)
                                       |
-                  seller anchors receipt (their tx IS the signature)
+              the SERVICE anchors the receipt after delivery
+              (seller's own key; the tx IS the receipt signature)
                                       |
                                    WINDOW         <- challenge window, fetched wall-clock
                        ______________|______________
@@ -282,9 +284,15 @@ mid-write.
   GEN rate, so a $2.50 payment reserves 2.5 GEN and a 50% slash costs the
   seller 1.25 GEN — real bond, not dust. Production replaces the fixed rate
   with a price oracle; the reserve/slash mechanism is already rate-agnostic.
-- **The window is seller risk.** A buyer can drain their wallet during the
-  challenge window, making a released authorization unsubmittable. This is
-  stated x402 facilitator reality, and it argues for short windows.
+- **The authorization now spans the full dispute lifecycle — and that has a
+  cost.** An authorization must stay valid through the challenge window PLUS
+  the contract's 7-day terminal-dispute period, or a seller who WINS a
+  fought dispute could never be paid (the settle route refuses shorter
+  auths). The flip side is stated plainly: the buyer's authorization stays
+  live for that whole span, and a buyer can drain their wallet during it,
+  making a released authorization unsubmittable. That is x402 facilitator
+  reality; the mitigation is the on-chain record — a buyer who does this to
+  a winning seller does it in public, on their own payment history.
 - **Testnet only, deliberately.** Notch holds live payment authorizations.
   Pointing that at mainnet before the settlement path is reviewed would risk
   other people's money to make a demo look better.

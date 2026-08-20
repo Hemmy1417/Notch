@@ -24,6 +24,26 @@ import { z } from "zod";
 export const MAX_CRITERIA_CHARS = 1200;
 
 /**
+ * Court timing, mirrored from the deployed contract (get_config is the
+ * authority; the E2E asserts these match it). An authorization must remain
+ * valid through the WHOLE period in which the court could still order a
+ * release — not just the challenge window. A challenge filed at the window's
+ * last second opens a dispute that may run to the 7-day terminal exit, and a
+ * seller who WINS that dispute must still be payable: an authorization that
+ * expired mid-dispute would make the ruling unexecutable, converting every
+ * dispute into a free refund for the buyer.
+ */
+export const DISPUTE_TERMINAL_SECONDS = 604_800;   // contract: 7d stale-dispute exit
+export const RECEIPT_GRACE_SECONDS = 3_600;        // contract: deadline-path grace
+/** Margin for record/anchor round-trips and clock skew between parties. */
+export const AUTH_MARGIN_SECONDS = 7_200;
+
+/** The minimum lifetime an authorization needs at settle time. */
+export function minAuthLifetimeSeconds(windowSeconds: number): number {
+  return windowSeconds + DISPUTE_TERMINAL_SECONDS + RECEIPT_GRACE_SECONDS;
+}
+
+/**
  * Scheme/network pairs this facilitator handles, in the v1 wire shape that
  * x402@1.2.0 actually sends — named networks, not CAIP-2 ids.
  *

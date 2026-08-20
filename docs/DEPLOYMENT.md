@@ -170,3 +170,27 @@ GEN-denominated, so a $2.50 payment produces a microscopic slash in GEN
 terms. Production needs a rate mapping or GEN-denominated pricing; the
 mechanism — reserve, ruling, slash, routing — is what this deployment
 proves, and it moved the exact numbers the rules dictate.
+
+## Judge-feedback fixes (2026-08-20) — the service drives the court
+
+Two asks from review, both closed and proven live:
+
+1. **The normal service flow now performs the court writes itself.** After
+   /settle holds an authorization, the facilitator records it on the court
+   (record_payment) from a post-response hook; after the seller route signs a
+   delivery, the service anchors the receipt (submit_receipt) the same way;
+   the reconciler heals anything a crash or rate-limit missed, idempotently,
+   confirmed by state reads. The E2E scripts are now OBSERVERS with dry-run
+   fallbacks only.
+
+   Live proof `pay_ffbfcc45fd06bfd4`: an unmodified x402 client paid; the
+   observer script found the payment already recorded AND anchored (state
+   WINDOW) with neither fallback firing — zero court writes off-service.
+
+2. **Authorizations survive the full dispute lifecycle.** maxTimeoutSeconds
+   now carries window + the contract's 7-day terminal-dispute period + grace
+   (+ margin), and /settle refuses any authorization that could expire
+   mid-dispute (`authorization_cannot_survive_dispute_period`) — a seller who
+   WINS a fought dispute must still be payable, or every dispute becomes a
+   free refund. The extended buyer-drain exposure this creates is stated in
+   the README, not hidden.

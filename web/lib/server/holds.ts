@@ -27,6 +27,12 @@ import os from "node:os";
 import path from "node:path";
 import type { Authorization } from "@/lib/x402/eip3009";
 
+export type HoldReceipt = {
+  bodySha256: string;
+  excerptSha256: string;
+  excerptLen: number;
+};
+
 export type StoredHold = {
   paymentId: string;
   quoteHash: string;
@@ -37,9 +43,19 @@ export type StoredHold = {
   state: "HELD" | "SUBMITTED" | "RELEASED" | "REFUNDED" | "FAILED";
   /** Rail outcome once known: tx hash on release, expiry note on refund. */
   settleRef: string | null;
+  /** Court-flow progress — the SERVICE drives these, the reconciler heals
+   *  them. Optional because holds predating the fields exist on disk. */
+  courtRecorded?: boolean;
+  receipt?: HoldReceipt | null;
+  receiptAnchored?: boolean;
   createdAt: number;
   updatedAt: number;
 };
+
+/** The court-flow fields a caller may patch — never state or the auth. */
+export type HoldPatch = Partial<
+  Pick<StoredHold, "courtRecorded" | "receipt" | "receiptAnchored">
+>;
 
 export interface HoldStore {
   /** Stores a new hold. Throws if the nonce is already held. */
@@ -47,6 +63,8 @@ export interface HoldStore {
   get(paymentId: string): Promise<StoredHold | null>;
   /** State transition with optional rail reference. Returns the updated hold. */
   transition(paymentId: string, state: StoredHold["state"], settleRef?: string): Promise<StoredHold>;
+  /** Patches court-flow progress fields only. */
+  update(paymentId: string, patch: HoldPatch): Promise<StoredHold>;
   list(): Promise<StoredHold[]>;
 }
 
@@ -130,6 +148,18 @@ export class FileHoldStore implements HoldStore {
     }
     hold.state = state;
     if (settleRef !== undefined) hold.settleRef = settleRef;
+    hold.updatedAt = Date.now();
+    await this.write(all);
+    return hold;
+  }
+
+  async update(paymentId: string, patch: HoldPatch): Promise<StoredHold> {
+    const all = await this.read();
+    const hold = all[paymentId];
+    if (!hold) throw new Error(`no hold for payment ${paymentId}`);
+    if (patch.courtRecorded !== undefined) hold.courtRecorded = patch.courtRecorded;
+    if (patch.receipt !== undefined) hold.receipt = patch.receipt;
+    if (patch.receiptAnchored !== undefined) hold.receiptAnchored = patch.receiptAnchored;
     hold.updatedAt = Date.now();
     await this.write(all);
     return hold;

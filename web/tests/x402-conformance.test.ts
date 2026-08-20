@@ -153,6 +153,17 @@ describe("criteria a panel could actually apply", () => {
     expect(() => buildProtectedQuote({ ...BASE, windowSeconds: 5 })).toThrow();
     expect(() => buildProtectedQuote({ ...BASE, windowSeconds: 999_999 })).toThrow();
   });
+
+  it("served maxTimeoutSeconds covers the FULL dispute lifecycle", () => {
+    // maxTimeoutSeconds is what an x402 client turns into validBefore. It must
+    // cover window + the contract's 7d terminal-dispute period + grace, or a
+    // seller who WINS a fought dispute could not be paid — the settle route
+    // refuses shorter auths, so serving less would refuse every honest payer.
+    const q = buildProtectedQuote(BASE);
+    expect(q.maxTimeoutSeconds).toBeGreaterThanOrEqual(
+      BASE.windowSeconds + 604_800 + 3_600,
+    );
+  });
 });
 
 describe("the price floor is real, and stated", () => {

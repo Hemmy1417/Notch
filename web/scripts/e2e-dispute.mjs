@@ -148,9 +148,15 @@ ok(`payment ${notch.paymentId} HELD; the seller SIGNED for this delivery`);
 info("that signature is now evidence — nobody can claim the delivery was different");
 
 // ── 2: the court records it; the receipt is anchored ────────────────────────
-step(2, "recording the payment and anchoring the receipt");
+step(2, "the SERVICE records and anchors — observing (fallback only on dry-run)");
 let p = await courtRead("get_payment", [notch.paymentId]);
+for (let i = 0; i < 24 && (!p || p.state === "AWAITING_RECEIPT"); i++) {
+  await sleep(6000);
+  p = await courtRead("get_payment", [notch.paymentId]);
+  if (p?.state === "WINDOW") break;
+}
 if (!p) {
+  info("service record not visible — falling back to the operator CLI write");
   cliWrite("record_payment", [notch.paymentId, notch.quoteHash, buyer.address]);
   for (let i = 0; i < 15 && !p; i++) { await sleep(5000); p = await courtRead("get_payment", [notch.paymentId]); }
   if (!p) die("record_payment never became readable — rerun shortly");

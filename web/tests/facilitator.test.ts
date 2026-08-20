@@ -53,8 +53,9 @@ function freshAuth(over: Partial<Authorization> = {}): Authorization {
     to: SELLER_ADDR,
     value: "1000000",
     validAfter: String(NOW() - 60),
-    // must outlive the 600s challenge window
-    validBefore: String(NOW() + 7200),
+    // must survive the FULL dispute lifecycle: 600s window + the 7d
+    // terminal-dispute period + grace — a winning seller must stay payable
+    validBefore: String(NOW() + 600 + 604_800 + 3_600 + 600),
     nonce: ("0x" +
       Array.from(crypto.getRandomValues(new Uint8Array(32)))
         .map((b) => b.toString(16).padStart(2, "0")).join("")) as string,
@@ -204,13 +205,21 @@ describe("/settle — the hold, now real", () => {
     expect(body.errorReason).toBe("missing_notch_terms");
   });
 
-  it("refuses an authorization that expires inside the challenge window", async () => {
-    // validBefore only 60s out, window 600s: a RELEASE ruling after the
-    // window would be unexecutable — the money would already be unreachable.
-    const body = await (await settle(
+  it("refuses an authorization that cannot survive the dispute period", async () => {
+    // validBefore only 60s out, window 600s: unexecutable immediately.
+    const early = await (await settle(
       req(await paymentBody({ validBefore: String(NOW() + 60) })) as never,
     )).json();
-    expect(body.errorReason).toBe("authorization_expires_inside_challenge_window");
+    expect(early.errorReason).toBe("authorization_cannot_survive_dispute_period");
+
+    // The subtler case the judges called out: an auth that outlives the
+    // WINDOW but not a dispute. A challenge at the window's edge can run to
+    // the 7-day terminal exit; if the auth dies mid-dispute, a seller who
+    // WINS cannot be paid — every dispute becomes a free refund.
+    const midDispute = await (await settle(
+      req(await paymentBody({ validBefore: String(NOW() + 600 + 3_600) })) as never,
+    )).json();
+    expect(midDispute.errorReason).toBe("authorization_cannot_survive_dispute_period");
   });
 
   it("never returns a fabricated transaction hash", async () => {

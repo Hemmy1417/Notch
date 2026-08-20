@@ -1,7 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { buildProtectedQuote, paymentRequiredBody } from "@/lib/x402/quote";
 import { CHAIN, DEFAULT_WINDOW_SECONDS, meetsFloor } from "@/lib/config";
 import { signReceipt, receiptFor } from "@/lib/x402/receipt";
+import { holdStore } from "@/lib/server/holds";
+import { advancePayment, scheduleAfter } from "@/lib/server/courtflow";
+
+// Post-response court writes (record + anchor) need StudioNet round-trips.
+export const maxDuration = 60;
 
 /**
  * A real x402 resource, protected by Notch.
@@ -213,6 +218,23 @@ export async function GET(req: NextRequest) {
     sellerPk as `0x${string}`,
     receiptFor(settled.notch.paymentId, settled.notch.quoteHash, bodyText),
   );
+
+  // Stash the receipt on the hold, then drive the court from the SERVICE:
+  // record_payment if the settle-side write hasn't landed yet, submit_receipt
+  // now that a signed delivery exists. This is the normal flow — no script,
+  // no manual operator step; the reconciler heals whatever a crash misses.
+  try {
+    await holdStore().update(settled.notch.paymentId, {
+      receipt: {
+        bodySha256: signedReceipt.receipt.bodySha256,
+        excerptSha256: signedReceipt.receipt.excerptSha256,
+        excerptLen: signedReceipt.receipt.excerptLen,
+      },
+    });
+    scheduleAfter(after, () => advancePayment(settled.notch.paymentId));
+  } catch {
+    /* a missing hold here would have failed /settle already */
+  }
 
   // v1 carries the settlement response back in X-PAYMENT-RESPONSE (base64).
   const paymentResponse = Buffer.from(JSON.stringify({

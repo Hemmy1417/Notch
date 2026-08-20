@@ -1,11 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import type { SettleResult } from "@/lib/x402/facilitator";
-import { SUPPORTED_KINDS, notchTermsOf } from "@/lib/x402/notch";
+import { SUPPORTED_KINDS, notchTermsOf, minAuthLifetimeSeconds } from "@/lib/x402/notch";
 import { domainFor, verifyAuthorizationSignature } from "@/lib/x402/eip3009";
 import { quoteHash } from "@/lib/x402/quote-hash";
 import { holdStore } from "@/lib/server/holds";
+import { ensureRecorded, scheduleAfter } from "@/lib/server/courtflow";
 import type { Hex } from "viem";
+
+// The post-response court record can take a few StudioNet round-trips.
+export const maxDuration = 60;
 
 /**
  * POST /api/facilitator/settle
@@ -106,10 +110,14 @@ export async function POST(req: NextRequest) {
   if (Number(auth.validBefore) <= now) return refuse(network, "authorization_expired");
   if (Number(auth.validAfter) > now) return refuse(network, "authorization_not_yet_valid");
 
-  // The authorization must outlive the challenge window, or a dispute could
-  // outlast the payment it is about and a RELEASE ruling would be unexecutable.
-  if (Number(auth.validBefore) < now + terms.windowSeconds) {
-    return refuse(network, "authorization_expires_inside_challenge_window");
+  // The authorization must outlive the FULL dispute lifecycle — window plus
+  // the contract's 7-day terminal-dispute period plus grace. A challenge filed
+  // at the window's last second opens a dispute the court may take days to
+  // resolve, and a seller who WINS it must still be payable: an authorization
+  // that expires mid-dispute makes every RELEASE ruling unexecutable and turns
+  // disputes into free refunds.
+  if (Number(auth.validBefore) < now + minAuthLifetimeSeconds(terms.windowSeconds)) {
+    return refuse(network, "authorization_cannot_survive_dispute_period");
   }
 
   const qh = quoteHash({
@@ -156,6 +164,11 @@ export async function POST(req: NextRequest) {
     return refuse(network, "hold_conflict_nonce_reused");
   }
 
+  // The normal service flow records the hold on the court itself, after the
+  // response is sent — no script, no manual operator step. The reconciler
+  // heals any record this misses (a crash, a rate-limited round).
+  scheduleAfter(after, () => ensureRecorded(paymentId));
+
   return NextResponse.json(
     {
       success: false,           // true would mean "settled on-chain" — it is not
@@ -168,9 +181,9 @@ export async function POST(req: NextRequest) {
         quoteHash: qh,
         state: "HELD",
         windowSeconds: terms.windowSeconds,
-        note: "The authorization is held, not submitted. Release or refund is " +
-              "decided by the Notch contract's published rules; record_payment " +
-              "is the operator's next on-chain step.",
+        note: "The authorization is held, not submitted. The facilitator is " +
+              "recording this payment on the court now; release or refund is " +
+              "decided by the contract's published rules.",
       },
     },
     { status: 200, headers: { "X-Notch-State": "HELD", "X-Notch-Payment-Id": paymentId } },

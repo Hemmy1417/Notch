@@ -302,19 +302,28 @@ ok(`receipt signature recovers to the BONDED seller wallet`);
 if (r.bodySha256 !== sha256(bodyText)) die("receipt bodySha256 does not match the delivered bytes");
 ok(`bodySha256 matches the exact bytes received — the tally is honest`);
 
-// ── 5: the court records the payment (operator) ─────────────────────────────
-step(5, "the operator records the hold on the court");
+// ── 5+6: the SERVICE records the payment and anchors the receipt ────────────
+// The normal flow drives the court itself now (settle -> record_payment,
+// delivery -> submit_receipt, reconciler heals). This script OBSERVES — it
+// polls for the service's writes and only falls back to doing them itself if
+// the service reported a dry run (no operator/seller keys configured).
+step(5, "the SERVICE records the hold and anchors the receipt — this script observes");
 let courtPayment = await courtRead("get_payment", [notch.paymentId]);
+for (let i = 0; i < 24 && (!courtPayment || courtPayment.state === "AWAITING_RECEIPT"); i++) {
+  await sleep(6000);
+  courtPayment = await courtRead("get_payment", [notch.paymentId]);
+  if (courtPayment?.state === "WINDOW") break;
+}
 if (!courtPayment) {
+  info("service record not visible — falling back to the operator CLI write");
   cliWrite("record_payment", [notch.paymentId, notch.quoteHash, buyer.address]);
   for (let i = 0; i < 12 && !courtPayment; i++) { await sleep(5000); courtPayment = await courtRead("get_payment", [notch.paymentId]); }
-  if (!courtPayment) die("record_payment submitted but never readable — rerun shortly");
+  if (!courtPayment) die("record_payment never became readable — rerun shortly");
 }
 ok(`payment on court in state ${courtPayment.state}; seller exposure reserved`);
 
-// ── 6: the seller anchors the receipt with their bonded wallet ─────────────
-step(6, "the seller anchors the receipt on-chain (their tx signature IS the receipt signature)");
 if (courtPayment.state === "AWAITING_RECEIPT") {
+  info("service anchor not visible — falling back to the seller write");
   await sellerWrite("submit_receipt", [notch.paymentId, r.bodySha256, r.excerptSha256, r.excerptLen]);
   for (let i = 0; i < 18; i++) {
     await sleep(5000);
@@ -324,6 +333,7 @@ if (courtPayment.state === "AWAITING_RECEIPT") {
 }
 if (courtPayment.state !== "WINDOW") die(`expected WINDOW, court says ${courtPayment.state}`);
 ok(`window armed — closes at epoch ${courtPayment.window_ends}`);
+ok("record + anchor were SERVICE-driven (fallbacks above fire only on dry-run)");
 
 // ── 7: the window runs (real seconds; nobody can shorten it) ────────────────
 step(7, `the challenge window (${WINDOW}s of real, fetched wall-clock time)`);

@@ -3,6 +3,10 @@ import { z } from "zod";
 import { holdStore } from "@/lib/server/holds";
 import { getPayment, markSettled, COURT_CONFIGURED } from "@/lib/server/court";
 import { release, refundReference } from "@/lib/server/rail";
+import { advancePayment, flowSettled } from "@/lib/server/courtflow";
+
+// Healing (record + anchor + confirm) can take StudioNet round-trips.
+export const maxDuration = 60;
 
 /**
  * POST /api/facilitator/reconcile  { paymentId }
@@ -52,11 +56,21 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // The healer: whatever the service's post-response hooks missed (a crash,
+  // a rate-limited round), the reconciler drives now — record_payment, then
+  // submit_receipt — before reading the court's decision. Idempotent: steps
+  // already confirmed are skipped via the hold's flags.
+  let flow = null;
+  if (!flowSettled(hold)) {
+    flow = await advancePayment(paymentId);
+  }
+
   const court = await getPayment(paymentId);
   if (!court) {
     return NextResponse.json({
-      paymentId, holdState: hold.state, acted: false,
-      waiting: "the court has no record of this payment yet — record_payment has not landed",
+      paymentId, holdState: hold.state, acted: false, flow,
+      waiting: "the court has no record of this payment yet — the record was " +
+               "just driven; it becomes readable after finalization",
     });
   }
 
@@ -108,7 +122,7 @@ export async function POST(req: NextRequest) {
 
   // ── everything else: the court is still working ─────────────────────────
   return NextResponse.json({
-    paymentId, holdState: hold.state, acted: false,
+    paymentId, holdState: hold.state, acted: false, flow,
     waiting: `court state is ${court.state}`,
     windowEnds: court.window_ends || undefined,
   });

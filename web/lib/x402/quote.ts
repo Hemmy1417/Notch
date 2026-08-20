@@ -13,7 +13,10 @@ import { quoteHash } from "./quote-hash";
 import { domainFor } from "./eip3009";
 
 const NETWORK_CHAIN: Record<string, number> = { "base-sepolia": 84532 };
-import { NotchTermsSchema, type NotchTerms, MAX_CRITERIA_CHARS } from "./notch";
+import {
+  NotchTermsSchema, type NotchTerms, MAX_CRITERIA_CHARS,
+  minAuthLifetimeSeconds, AUTH_MARGIN_SECONDS,
+} from "./notch";
 
 /**
  * The x402 v1 wire shape, restated here rather than imported.
@@ -157,14 +160,17 @@ export function buildProtectedQuote(input: BuildQuoteInput): PaymentRequirements
     description: input.description,
     mimeType: input.mimeType ?? "application/json",
     payTo: input.payTo,
-    // The authorization must outlive the challenge window — the settle route
-    // refuses any payment whose validBefore falls inside it, because a RELEASE
-    // ruling on an expired authorization would be unexecutable. So the x402
-    // timeout floor tracks the window (plus a margin for the record + anchor
-    // round-trip) rather than sitting at a fixed 120s that a longer window
-    // would silently outlast.
+    // The authorization must survive the FULL dispute lifecycle, not just the
+    // challenge window: a challenge filed at the window's edge opens a dispute
+    // that may run to the contract's 7-day terminal exit, and a seller who
+    // WINS it must still be payable. maxTimeoutSeconds is what an x402 client
+    // turns into validBefore, so it carries window + terminal period + grace
+    // + a margin; the settle route refuses anything shorter. The honest cost
+    // — the buyer's authorization stays live for that whole span — is stated
+    // in the README rather than hidden here.
     maxTimeoutSeconds:
-      input.maxTimeoutSeconds ?? Math.max(120, input.windowSeconds + 120),
+      input.maxTimeoutSeconds ??
+      minAuthLifetimeSeconds(input.windowSeconds) + AUTH_MARGIN_SECONDS,
     asset: input.asset,
     extra: { name: domain.name, version: domain.version, ...terms },
   };
